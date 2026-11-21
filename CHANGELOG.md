@@ -1,5 +1,15 @@
 # 更新日志 / Changelog
 
+## v0.3.6 (2026-11-22)
+
+### 修复与优化 / Fixes & Improvements
+- **修复 Word (`.docx`) 缺少预渲染分页符时整篇渲染为一整大页的问题**：
+  - **新增几何溢出自动分页引擎（`src/utils/docxPaginator.ts`）**：针对由 `python-docx`、Pandoc、LibreOffice 或自动化脚本生成、缺少 `<w:lastRenderedPageBreak/>` 缓存标记的 `.docx` 文档，基于单页纸张 `min-height` 与 `<article>` 可用内容高度自动执行块级流式拆页；针对已有 Word 预渲染分页符的文档采用 `1.28x` 防误拆阈值，避免浏览器字体渲染微弱差异导致孤行误分页；
+  - **跨页长段落与 `keepNext` 保护**：基于 `document.createRange()` 对跨页长段落执行视觉行边界二分切分并内置寡行/孤行保护，自动清除续段 `text-indent` / `margin-top`（并在 `src/renderers/renderers.css` 抑制续段列表编号伪元素重复）、两端对齐首段补充 `text-align-last: justify`，并将分节结束标记 `fp-sect-end-*` 迁移至末片段；支持 `keepNext` 标题连同后续段落一并推入下一页；
+  - **跨页大表格安全切分**：避开 `rowSpan > 1` 纵向合并单元格边界安全拆表，并在续表顶部自动重复 `tblHeader` 表头行；
+  - **页眉页脚模板与动态页码联动**：优化 `src/renderers/wordRenderer.ts` 后处理时序（CJK 布局与 MathML 规范化 $\to$ 等待图片解码就绪 $\to$ 几何分页 $\to$ 页码域解析与制表位重算），支持 `titlePage`（首页不同）与 `evenAndOddHeaders`（奇偶页不同）页眉页脚模板合成渲染，确保拆分后的多页页脚依次填入 `1..N` 页码与总页数；
+  - **测试覆盖**：在 `tests/server.test.mjs` 新增 5 项几何自动分页单元测试，全量 16 个套件共 51 项测试全部通过。
+
 ## v0.3.5 (2026-11-22)
 
 ### 新增功能与体验升级 / Features & Improvements

@@ -63,6 +63,15 @@
   margin-bottom: 0 !important;
 }
 
+.fp-word-stage p.fp-docx-continued-para {
+  list-style-type: none !important;
+}
+
+.fp-word-stage p.fp-docx-continued-para::before {
+  content: none !important;
+  display: none !important;
+}
+
 .fp-word-stage math {
   font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Noto Sans Math", math, serif;
   font-variant-numeric: normal;

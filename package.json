@@ -1,6 +1,6 @@
 {
   "name": "file-preview",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "type": "module",
   "description": "Antigravity 侧边栏 PPT / Word / Excel / PDF / MP4 / HTML 文件预览插件",

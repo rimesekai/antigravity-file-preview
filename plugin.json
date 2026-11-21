@@ -1,7 +1,7 @@
 {
   "name": "file-preview",
   "displayName": "File Preview",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "High-fidelity local file preview in the Antigravity sidebar for PPT (.pptx), Word (.docx with full-text search), Excel (.xlsx / .xls / .csv / .tsv with multi-sheet switching, formula bar, and merged cells), PDF (.pdf with >20MB HTTP Range streaming), MP4 (.mp4 with >20MB streaming playback), and HTML (.html / .htm), with automatic Chinese/English UI.",
   "logo": "assets/logo.svg",
   "category": "Productivity",

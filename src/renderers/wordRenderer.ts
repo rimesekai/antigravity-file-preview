@@ -6,6 +6,7 @@ import type {
 import {
   applyDocxCjkLayout,
   collectDocxCjkLayout,
+  type DocxCjkLayoutContext,
 } from '../utils/docxCjkLayout';
 import {
   applyHeaderFooterFrameAlignment,
@@ -14,6 +15,12 @@ import {
   recalculateDocxTabStops,
   resolveDocxPageFields,
 } from '../utils/docxPageFields';
+import {
+  collectDocxPaginationMeta,
+  paginateOverflowDocxSections,
+  waitForDocxMediaReady,
+  type DocxHeaderFooterTemplates,
+} from '../utils/docxPaginator';
 import { createDragPanner, type DragPannerController } from '../utils/dragPanner';
 import {
   computeFitWidthLayout,
@@ -103,6 +110,97 @@ function normalizeDocxMathMl(container: HTMLElement): void {
   }
 }
 
+async function renderSyntheticHeaderFooterTemplates(
+  doc: any,
+  sectProps: any,
+  docxOptions: Partial<DocxPreviewOptions>,
+  stageEl: HTMLElement,
+  cjkLayoutContext: DocxCjkLayoutContext,
+): Promise<DocxHeaderFooterTemplates | null> {
+  if (!doc?.documentPart) return null;
+
+  const clonedStyles = Array.isArray(doc.stylesPart?.styles)
+    ? doc.stylesPart.styles.map((st: any) => ({
+        ...st,
+        styles: Array.isArray(st.styles)
+          ? st.styles.map((s: any) => ({ ...s, values: { ...s.values } }))
+          : st.styles,
+        paragraphProps: st.paragraphProps ? { ...st.paragraphProps } : st.paragraphProps,
+        runProps: st.runProps ? { ...st.runProps } : st.runProps,
+      }))
+    : undefined;
+
+  const syntheticDoc = Object.create(doc);
+  syntheticDoc.themePart = null;
+  syntheticDoc.fontTablePart = null;
+  syntheticDoc.footnotesPart = null;
+  syntheticDoc.endnotesPart = null;
+  if (doc.stylesPart) {
+    syntheticDoc.stylesPart = { ...doc.stylesPart, styles: clonedStyles };
+  }
+  syntheticDoc.documentPart = {
+    ...doc.documentPart,
+    body: {
+      type: 'document',
+      cssStyle: doc.documentPart?.body?.cssStyle ?? {},
+      props: sectProps,
+      children: [
+        { type: 'paragraph', children: [{ type: 'run', children: [{ type: 'break', break: 'page' }] }] },
+        { type: 'paragraph', children: [{ type: 'run', children: [{ type: 'break', break: 'page' }] }] },
+        { type: 'paragraph', children: [] },
+      ],
+    },
+  };
+
+  const nodes = await renderDocument(syntheticDoc, {
+    ...docxOptions,
+    ignoreFonts: true,
+    renderFootnotes: false,
+    renderEndnotes: false,
+    renderComments: false,
+  });
+
+  const tempHost = document.createElement('div');
+  tempHost.style.position = 'absolute';
+  tempHost.style.visibility = 'hidden';
+  tempHost.style.pointerEvents = 'none';
+  tempHost.style.left = '-99999px';
+  tempHost.style.top = '0';
+  for (const node of nodes) {
+    tempHost.appendChild(node);
+  }
+  stageEl.appendChild(tempHost);
+
+  try {
+    applyDocxCjkLayout(tempHost, cjkLayoutContext);
+    const wrapperSections = Array.from(
+      tempHost.querySelectorAll<HTMLElement>('.docx-wrapper > section.docx'),
+    );
+    const sections =
+      wrapperSections.length > 0
+        ? wrapperSections
+        : Array.from(tempHost.querySelectorAll<HTMLElement>('section.docx'));
+
+    const extractPair = (sec?: HTMLElement) => {
+      if (!sec) return undefined;
+      const header = sec.querySelector<HTMLElement>(':scope > header');
+      const footer = sec.querySelector<HTMLElement>(':scope > footer');
+      return {
+        header: header ? (header.cloneNode(true) as HTMLElement) : null,
+        footer: footer ? (footer.cloneNode(true) as HTMLElement) : null,
+      };
+    };
+
+    return {
+      first: extractPair(sections[0]),
+      even: extractPair(sections[1]),
+      default: extractPair(sections[2]),
+    };
+  } finally {
+    tempHost.remove();
+  }
+}
+
 export function createWordRenderer(): PreviewRenderer {
   let rootEl: HTMLElement | null = null;
   let viewportEl: HTMLElement | null = null;
@@ -115,6 +213,7 @@ export function createWordRenderer(): PreviewRenderer {
   let rafLayoutId: number | null = null;
   let rafScrollId: number | null = null;
   let loadGeneration = 0;
+  let preparingGeneration = 0;
   let destroyed = false;
 
   let fitMode = true;
@@ -166,7 +265,7 @@ export function createWordRenderer(): PreviewRenderer {
   }
 
   function updateLayout(): void {
-    if (destroyed || !viewportEl || !sizerEl || !scaleLayerEl || !stageEl) return;
+    if (destroyed || !viewportEl || !sizerEl || !scaleLayerEl || !stageEl || preparingGeneration !== 0) return;
 
     viewportEl.classList.toggle('is-fit-mode', fitMode);
 
@@ -244,7 +343,7 @@ export function createWordRenderer(): PreviewRenderer {
   }
 
   function scheduleLayout(): void {
-    if (destroyed || rafLayoutId !== null) return;
+    if (destroyed || rafLayoutId !== null || preparingGeneration !== 0) return;
     rafLayoutId = requestAnimationFrame(() => {
       rafLayoutId = null;
       updateLayout();
@@ -461,75 +560,105 @@ export function createWordRenderer(): PreviewRenderer {
     const prevActiveIdx = preserveViewState ? activeMatchIndex : -1;
 
     const gen = ++loadGeneration;
-    dragPanner?.reset();
-    clearSearchHighlights();
-    stageEl.innerHTML = '';
-    totalPages = 0;
-    if (!preserveViewState) {
-      currentPage = 1;
-      searchQuery = '';
-      activeMatchIndex = -1;
-    }
-    if (sizerEl) {
-      sizerEl.style.width = '';
-      sizerEl.style.height = '';
-    }
-    if (scaleLayerEl) {
-      scaleLayerEl.style.transform = 'scale(1)';
-    }
-    lastAppliedWidth = -1;
-    lastAppliedHeight = -1;
-    lastAppliedScale = -1;
+    preparingGeneration = gen;
+    try {
+      dragPanner?.reset();
+      clearSearchHighlights();
+      stageEl.innerHTML = '';
+      totalPages = 0;
+      if (!preserveViewState) {
+        currentPage = 1;
+        searchQuery = '';
+        activeMatchIndex = -1;
+      }
+      if (sizerEl) {
+        sizerEl.style.width = '';
+        sizerEl.style.height = '';
+      }
+      if (scaleLayerEl) {
+        scaleLayerEl.style.transform = 'scale(1)';
+      }
+      lastAppliedWidth = -1;
+      lastAppliedHeight = -1;
+      lastAppliedScale = -1;
 
-    const docxOptions: Partial<DocxPreviewOptions> & { keepOrigin?: boolean } = {
-      inWrapper: true,
-      breakPages: true,
-      ignoreLastRenderedPageBreak: false,
-      renderHeaders: true,
-      renderFooters: true,
-      renderFootnotes: true,
-      renderEndnotes: true,
-      useBase64URL: false,
-      keepOrigin: true,
-    };
+      const docxOptions: Partial<DocxPreviewOptions> & { keepOrigin?: boolean } = {
+        inWrapper: true,
+        breakPages: true,
+        ignoreLastRenderedPageBreak: false,
+        renderHeaders: true,
+        renderFooters: true,
+        renderFootnotes: true,
+        renderEndnotes: true,
+        useBase64URL: false,
+        keepOrigin: true,
+      };
 
-    const doc = await parseAsync(lastBuffer, docxOptions);
-    if (destroyed || gen !== loadGeneration) {
-      return;
-    }
+      const doc = await parseAsync(lastBuffer, docxOptions);
+      if (destroyed || gen !== loadGeneration) {
+        return;
+      }
 
-    const sectionPageConfigs = preprocessDocxPageFields(doc);
-    await applyHeaderFooterFrameAlignment(doc);
-    if (destroyed || gen !== loadGeneration) {
-      return;
-    }
+      const paginationMeta = collectDocxPaginationMeta(doc);
+      const sectionPageConfigs = preprocessDocxPageFields(doc);
+      await applyHeaderFooterFrameAlignment(doc);
+      if (destroyed || gen !== loadGeneration) {
+        return;
+      }
 
-    const cjkLayoutContext = await collectDocxCjkLayout(doc);
-    if (destroyed || gen !== loadGeneration) {
-      return;
-    }
+      const cjkLayoutContext = await collectDocxCjkLayout(doc);
+      if (destroyed || gen !== loadGeneration) {
+        return;
+      }
 
-    const tabStopContext = collectDocxTabStops(doc);
-    const renderedNodes = await renderDocument(doc, docxOptions);
-    if (destroyed || gen !== loadGeneration) {
-      return;
-    }
+      const tabStopContext = collectDocxTabStops(doc);
+      const renderedNodes = await renderDocument(doc, docxOptions);
+      if (destroyed || gen !== loadGeneration) {
+        return;
+      }
 
-    stageEl.innerHTML = '';
-    for (const node of renderedNodes) {
-      stageEl.appendChild(node);
-    }
+      stageEl.innerHTML = '';
+      for (const node of renderedNodes) {
+        stageEl.appendChild(node);
+      }
 
-    resolveDocxPageFields(stageEl, sectionPageConfigs);
-    applyDocxCjkLayout(stageEl, cjkLayoutContext);
-    recalculateDocxTabStops(stageEl, tabStopContext);
-    normalizeDocxMathMl(stageEl);
+      applyDocxCjkLayout(stageEl, cjkLayoutContext);
+      normalizeDocxMathMl(stageEl);
+      await waitForDocxMediaReady(stageEl);
+      if (destroyed || gen !== loadGeneration) {
+        return;
+      }
 
-    if (preserveViewState && searchQuery) {
-      applySearchHighlights(searchQuery);
-      activeMatchIndex =
-        matchGroups.length > 0 ? clamp(Math.max(0, prevActiveIdx), 0, matchGroups.length - 1) : -1;
-      focusActiveMatch(false);
+      if (scaleLayerEl) {
+        scaleLayerEl.style.transform = 'scale(1)';
+      }
+      await paginateOverflowDocxSections(stageEl, paginationMeta, {
+        renderHeaderFooterTemplates: async (sectProps) =>
+          renderSyntheticHeaderFooterTemplates(
+            doc,
+            sectProps,
+            docxOptions,
+            stageEl!,
+            cjkLayoutContext,
+          ),
+      });
+      if (destroyed || gen !== loadGeneration) {
+        return;
+      }
+
+      resolveDocxPageFields(stageEl, sectionPageConfigs);
+      recalculateDocxTabStops(stageEl, tabStopContext);
+
+      if (preserveViewState && searchQuery) {
+        applySearchHighlights(searchQuery);
+        activeMatchIndex =
+          matchGroups.length > 0 ? clamp(Math.max(0, prevActiveIdx), 0, matchGroups.length - 1) : -1;
+        focusActiveMatch(false);
+      }
+    } finally {
+      if (preparingGeneration === gen) {
+        preparingGeneration = 0;
+      }
     }
 
     updateLayout();
@@ -729,6 +858,7 @@ export function createWordRenderer(): PreviewRenderer {
     destroy(): void {
       destroyed = true;
       loadGeneration++;
+      preparingGeneration = 0;
       clearSearchHighlights();
       searchQuery = '';
       activeMatchIndex = -1;

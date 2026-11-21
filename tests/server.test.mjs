@@ -2780,6 +2780,720 @@ describe('docxCjkLayout 中文字符缩进与行单位段距解析测试', () =>
   });
 });
 
+describe('docxPaginator Word 无预渲染分页符几何自动分页测试', () => {
+  function createMockDomEnv() {
+    class MockClassList {
+      constructor(el) {
+        this._el = el;
+      }
+      _list() {
+        return (this._el._className ?? '').split(/\s+/).filter(Boolean);
+      }
+      _save(items) {
+        this._el._className = items.join(' ');
+      }
+      contains(cls) {
+        return this._list().includes(cls);
+      }
+      add(...classes) {
+        const set = new Set(this._list());
+        for (const c of classes) if (c) set.add(c);
+        this._save(Array.from(set));
+      }
+      remove(...classes) {
+        const drop = new Set(classes);
+        this._save(this._list().filter((c) => !drop.has(c)));
+      }
+      [Symbol.iterator]() {
+        return this._list()[Symbol.iterator]();
+      }
+    }
+
+    class MockNode {
+      constructor(nodeType) {
+        this.nodeType = nodeType;
+        this.parentNode = null;
+        this.childNodes = [];
+      }
+      get nextSibling() {
+        if (!this.parentNode) return null;
+        const siblings = this.parentNode.childNodes;
+        const idx = siblings.indexOf(this);
+        return idx >= 0 && idx + 1 < siblings.length ? siblings[idx + 1] : null;
+      }
+    }
+
+    class MockText extends MockNode {
+      constructor(text) {
+        super(3);
+        this.nodeValue = text;
+      }
+      get textContent() {
+        return this.nodeValue;
+      }
+      set textContent(v) {
+        this.nodeValue = String(v);
+      }
+      cloneNode() {
+        return new MockText(this.nodeValue);
+      }
+    }
+
+    class MockElement extends MockNode {
+      constructor(tagName, opts = {}) {
+        super(1);
+        this.tagName = tagName.toUpperCase();
+        this._className = opts.className ?? '';
+        this.style = { ...(opts.style ?? {}) };
+        this.attributes = { ...(opts.attributes ?? {}) };
+        this.classList = new MockClassList(this);
+        this._mockHeight = opts.height ?? 0;
+        this._mockMarginTop = opts.marginTop ?? 0;
+        this._mockMarginBottom = opts.marginBottom ?? 0;
+        this.rowSpan = opts.rowSpan ?? 1;
+        this._rect = opts.rect ?? null;
+      }
+      get className() {
+        return this._className;
+      }
+      set className(val) {
+        this._className = String(val ?? '');
+      }
+      get children() {
+        return this.childNodes.filter((n) => n.nodeType === 1);
+      }
+      get offsetHeight() {
+        if (this.tagName === 'TABLE' && this._mockHeight === 0) {
+          let total = 0;
+          for (const ch of this.children) {
+            if (ch.tagName === 'TR') total += ch.offsetHeight;
+          }
+          return total;
+        }
+        if (this._mockHeight > 0) return this._mockHeight;
+        if (this.tagName === 'SECTION') {
+          let total = 0;
+          for (const ch of this.children) total += ch.offsetHeight;
+          return total;
+        }
+        return 0;
+      }
+      set offsetHeight(v) {
+        this._mockHeight = v;
+      }
+      get textContent() {
+        return this.childNodes.map((n) => n.textContent ?? '').join('');
+      }
+      set textContent(v) {
+        this.childNodes = v ? [new MockText(String(v))] : [];
+        if (this.childNodes[0]) this.childNodes[0].parentNode = this;
+      }
+      getAttribute(name) {
+        if (name === 'rowspan' && this.rowSpan > 1) return String(this.rowSpan);
+        return Object.prototype.hasOwnProperty.call(this.attributes, name)
+          ? this.attributes[name]
+          : null;
+      }
+      removeAttribute(name) {
+        delete this.attributes[name];
+      }
+      appendChild(child) {
+        if (child.parentNode) {
+          const oldSibs = child.parentNode.childNodes;
+          const idx = oldSibs.indexOf(child);
+          if (idx >= 0) oldSibs.splice(idx, 1);
+        }
+        child.parentNode = this;
+        this.childNodes.push(child);
+        return child;
+      }
+      insertBefore(newChild, refChild) {
+        if (!refChild) return this.appendChild(newChild);
+        if (newChild.parentNode) {
+          const oldSibs = newChild.parentNode.childNodes;
+          const oldIdx = oldSibs.indexOf(newChild);
+          if (oldIdx >= 0) oldSibs.splice(oldIdx, 1);
+        }
+        const idx = this.childNodes.indexOf(refChild);
+        newChild.parentNode = this;
+        if (idx >= 0) {
+          this.childNodes.splice(idx, 0, newChild);
+        } else {
+          this.childNodes.push(newChild);
+        }
+        return newChild;
+      }
+      remove() {
+        if (!this.parentNode) return;
+        const idx = this.parentNode.childNodes.indexOf(this);
+        if (idx >= 0) this.parentNode.childNodes.splice(idx, 1);
+        this.parentNode = null;
+      }
+      cloneNode(deep = false) {
+        const copy = new MockElement(this.tagName, {
+          className: this._className,
+          style: { ...this.style },
+          attributes: { ...this.attributes },
+          height: this._mockHeight,
+          marginTop: this._mockMarginTop,
+          marginBottom: this._mockMarginBottom,
+          rowSpan: this.rowSpan,
+          rect: this._rect ? { ...this._rect } : null,
+        });
+        if (deep) {
+          for (const ch of this.childNodes) {
+            copy.appendChild(ch.cloneNode(true));
+          }
+        }
+        return copy;
+      }
+      getBoundingClientRect() {
+        return this._rect ?? { top: 0, bottom: this._mockHeight, height: this._mockHeight };
+      }
+      querySelectorAll(selector) {
+        const res = [];
+        const matchSimple = (el, sel) => {
+          if (sel === '[id]') return Object.prototype.hasOwnProperty.call(el.attributes, 'id');
+          if (sel.startsWith('[class*="')) {
+            const needle = sel.slice(9, -2);
+            return el.className.includes(needle);
+          }
+          if (sel === 'section.docx') {
+            return el.tagName === 'SECTION' && el.classList.contains('docx');
+          }
+          if (/^[a-z0-9]+$/i.test(sel)) {
+            return el.tagName === sel.toUpperCase();
+          }
+          return false;
+        };
+        if (selector === '.docx-wrapper > section.docx') {
+          const walkWrap = (node) => {
+            for (const ch of node.children) {
+              if (ch.classList.contains('docx-wrapper')) {
+                for (const sec of ch.children) {
+                  if (sec.tagName === 'SECTION' && sec.classList.contains('docx')) res.push(sec);
+                }
+              }
+              walkWrap(ch);
+            }
+          };
+          walkWrap(this);
+          return res;
+        }
+        const walk = (node) => {
+          for (const ch of node.children) {
+            if (matchSimple(ch, selector)) res.push(ch);
+            walk(ch);
+          }
+        };
+        walk(this);
+        return res;
+      }
+      querySelector(selector) {
+        return this.querySelectorAll(selector)[0] ?? null;
+      }
+    }
+
+    const mockDocument = {
+      createElement(tag) {
+        return new MockElement(tag);
+      },
+      createTreeWalker(root, whatToShow) {
+        const nodes = [];
+        const collect = (node) => {
+          for (const ch of node.childNodes) {
+            if (whatToShow === 4 && ch.nodeType === 3) {
+              nodes.push(ch);
+            } else if (ch.nodeType === 1) {
+              collect(ch);
+            }
+          }
+        };
+        collect(root);
+        let idx = -1;
+        return {
+          nextNode() {
+            idx += 1;
+            return idx < nodes.length ? nodes[idx] : null;
+          },
+        };
+      },
+    };
+
+    return { MockElement, MockText, mockDocument };
+  }
+
+  it('collectDocxPaginationMeta 准确识别有无 lastRenderedPageBreak、继承链 keepNext/keepLines 与 tblHeader', async () => {
+    const {
+      DOCX_KEEP_LINES_CLASS,
+      DOCX_KEEP_NEXT_CLASS,
+      DOCX_TBL_HEADER_CLASS,
+      collectDocxPaginationMeta,
+    } = await import('../src/utils/docxPaginator.ts');
+
+    const headingPara = { type: 'paragraph', styleName: 'Heading1', children: [] };
+    const overrideNoKeepPara = {
+      type: 'paragraph',
+      styleName: 'Heading1',
+      keepNext: false,
+      children: [],
+    };
+    const keepLinesPara = { type: 'paragraph', styleName: 'BodyKeep', children: [] };
+    const headerRow = { type: 'row', isHeader: true, children: [] };
+    const bodyRow = { type: 'row', isHeader: false, children: [] };
+
+    const docWithoutBreak = {
+      settingsPart: { settings: { evenAndOddHeaders: true } },
+      stylesPart: {
+        styles: [
+          {
+            id: 'Normal',
+            isDefault: true,
+            target: 'p',
+            paragraphProps: {},
+          },
+          {
+            id: 'HeadingBase',
+            target: 'p',
+            paragraphProps: { keepNext: true },
+          },
+          {
+            id: 'Heading1',
+            target: 'p',
+            basedOn: 'HeadingBase',
+            paragraphProps: {},
+          },
+          {
+            id: 'BodyKeep',
+            target: 'p',
+            paragraphProps: { keepLines: true },
+          },
+        ],
+      },
+      documentPart: {
+        body: {
+          props: { pageSize: { height: '841.9pt' } },
+          children: [
+            headingPara,
+            overrideNoKeepPara,
+            keepLinesPara,
+            { type: 'table', children: [headerRow, bodyRow] },
+          ],
+        },
+      },
+    };
+
+    const metaNoBreak = collectDocxPaginationMeta(docWithoutBreak);
+    assert.equal(metaNoBreak.hasLastRenderedPageBreak, false);
+    assert.equal(metaNoBreak.evenAndOddHeaders, true);
+    assert.equal(metaNoBreak.sectionMetas.length, 1);
+    assert.ok(headingPara.className?.includes(DOCX_KEEP_NEXT_CLASS));
+    assert.equal(Boolean(overrideNoKeepPara.className?.includes(DOCX_KEEP_NEXT_CLASS)), false);
+    assert.ok(keepLinesPara.className?.includes(DOCX_KEEP_LINES_CLASS));
+    assert.ok(headerRow.className?.includes(DOCX_TBL_HEADER_CLASS));
+    assert.equal(bodyRow.className, undefined);
+
+    const docWithBreak = {
+      documentPart: {
+        body: {
+          props: {},
+          children: [
+            {
+              type: 'paragraph',
+              children: [
+                { type: 'run', children: [{ type: 'break', break: 'lastRenderedPageBreak' }] },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const metaWithBreak = collectDocxPaginationMeta(docWithBreak);
+    assert.equal(metaWithBreak.hasLastRenderedPageBreak, true);
+  });
+
+  it('无 lastRenderedPageBreak 的 8 页长文档自动拆分为多页并与 resolveDocxPageFields 联动生成 1..N 页码（含 titlePage 与奇偶页）', async () => {
+    const { paginateOverflowDocxSections } = await import('../src/utils/docxPaginator.ts');
+    const {
+      DOCX_NUMPAGES_FIELD_TOKEN,
+      DOCX_PAGE_FIELD_TOKEN,
+      DOCX_SECTION_END_CLASS_PREFIX,
+      resolveDocxPageFields,
+    } = await import('../src/utils/docxPageFields.ts');
+
+    const { MockElement, MockText, mockDocument } = createMockDomEnv();
+    const prevDocument = globalThis.document;
+    const prevNodeFilter = globalThis.NodeFilter;
+    globalThis.document = mockDocument;
+    globalThis.NodeFilter = { SHOW_TEXT: 4 };
+
+    try {
+      const stage = new MockElement('div');
+      const wrapper = new MockElement('div', { className: 'docx-wrapper' });
+      const section = new MockElement('section', {
+        className: 'docx',
+        height: 7600,
+        style: { minHeight: '1120px' },
+      });
+
+      const firstHeader = new MockElement('header');
+      firstHeader.appendChild(new MockText('首页页眉'));
+      const firstFooter = new MockElement('footer');
+      firstFooter.appendChild(new MockText(''));
+
+      const article = new MockElement('article');
+      // 构造恰好 8 页内容：21 个普通段落（280px，每页 3 段共 7 页）+ 2 张大图片段落（440px，共 880px 占第 8 页）
+      for (let i = 0; i < 21; i += 1) {
+        const p = new MockElement('p', {
+          height: 280,
+          marginTop: 0,
+          marginBottom: 0,
+        });
+        p.appendChild(new MockText(`正文第 ${i + 1} 段`));
+        article.appendChild(p);
+      }
+      for (let j = 0; j < 2; j += 1) {
+        const imgP = new MockElement('p', {
+          height: 440,
+          marginTop: 0,
+          marginBottom: 0,
+          className: j === 1 ? `${DOCX_SECTION_END_CLASS_PREFIX}0` : '',
+        });
+        imgP.appendChild(new MockElement('img', { height: 420 }));
+        article.appendChild(imgP);
+      }
+
+      section.appendChild(firstHeader);
+      section.appendChild(article);
+      section.appendChild(firstFooter);
+      wrapper.appendChild(section);
+      stage.appendChild(wrapper);
+
+      const defaultHeader = new MockElement('header');
+      defaultHeader.appendChild(new MockText('正文章节页眉'));
+      const defaultFooter = new MockElement('footer');
+      defaultFooter.appendChild(
+        new MockText(`${DOCX_PAGE_FIELD_TOKEN} / ${DOCX_NUMPAGES_FIELD_TOKEN}`),
+      );
+      const evenFooter = new MockElement('footer');
+      evenFooter.appendChild(
+        new MockText(`偶数页 ${DOCX_PAGE_FIELD_TOKEN} / ${DOCX_NUMPAGES_FIELD_TOKEN}`),
+      );
+
+      const meta = {
+        hasLastRenderedPageBreak: false,
+        evenAndOddHeaders: true,
+        sectionMetas: [{ sectProps: { titlePage: true } }],
+      };
+
+      const measurer = {
+        getSectionMinHeightPx: () => 1120,
+        getSectionHeightPx: (sec) => sec.offsetHeight,
+        getMaxArticleHeightPx: () => 920,
+        getArticleColumnCount: () => 1,
+        measureBlock: (el) => ({
+          height: el._mockHeight,
+          marginTop: el._mockMarginTop,
+          marginBottom: el._mockMarginBottom,
+        }),
+        splitParagraph: () => null,
+        splitTable: () => null,
+      };
+
+      await paginateOverflowDocxSections(stage, meta, {
+        measurer,
+        renderHeaderFooterTemplates: async () => ({
+          first: { header: firstHeader, footer: firstFooter },
+          even: { header: defaultHeader, footer: evenFooter },
+          default: { header: defaultHeader, footer: defaultFooter },
+        }),
+      });
+
+      const pages = stage.querySelectorAll('.docx-wrapper > section.docx');
+      assert.equal(pages.length, 8);
+
+      resolveDocxPageFields(stage, [{ format: 'decimal', start: 1 }]);
+
+      assert.equal(pages[0].querySelectorAll('header')[0]?.textContent, '首页页眉');
+      assert.equal(pages[0].querySelectorAll('footer')[0]?.textContent, '');
+      assert.equal(pages[1].querySelectorAll('header')[0]?.textContent, '正文章节页眉');
+      assert.equal(pages[1].querySelectorAll('footer')[0]?.textContent, '偶数页 2 / 8');
+      assert.equal(pages[2].querySelectorAll('footer')[0]?.textContent, '3 / 8');
+      assert.equal(pages[7].querySelectorAll('footer')[0]?.textContent, '偶数页 8 / 8');
+    } finally {
+      globalThis.document = prevDocument;
+      globalThis.NodeFilter = prevNodeFilter;
+    }
+  });
+
+  it('已有 lastRenderedPageBreak 时微弱溢出（1.08x）不误拆页，严重溢出（1.35x）仍兜底分页', async () => {
+    const { paginateOverflowDocxSections } = await import('../src/utils/docxPaginator.ts');
+    const { MockElement, MockText } = createMockDomEnv();
+
+    const makeStage = (sectionHeight) => {
+      const stage = new MockElement('div');
+      const wrapper = new MockElement('div', { className: 'docx-wrapper' });
+      const section = new MockElement('section', {
+        className: 'docx',
+        height: sectionHeight,
+        style: { minHeight: '1000px' },
+      });
+      const article = new MockElement('article');
+      for (let i = 0; i < 3; i += 1) {
+        const p = new MockElement('p', { height: Math.round(sectionHeight / 3) });
+        p.appendChild(new MockText(`段落 ${i}`));
+        article.appendChild(p);
+      }
+      section.appendChild(article);
+      wrapper.appendChild(section);
+      stage.appendChild(wrapper);
+      return stage;
+    };
+
+    const metaWithBreak = {
+      hasLastRenderedPageBreak: true,
+      evenAndOddHeaders: false,
+      sectionMetas: [{ sectProps: {} }],
+    };
+
+    const measurer = {
+      getSectionMinHeightPx: () => 1000,
+      getSectionHeightPx: (sec) => sec.offsetHeight,
+      getMaxArticleHeightPx: () => 900,
+      getArticleColumnCount: () => 1,
+      measureBlock: (el) => ({ height: el._mockHeight, marginTop: 0, marginBottom: 0 }),
+      splitParagraph: () => null,
+      splitTable: () => null,
+    };
+
+    // 1.08x <= 1.28x：不误拆页
+    const slightStage = makeStage(1080);
+    await paginateOverflowDocxSections(slightStage, metaWithBreak, { measurer });
+    assert.equal(slightStage.querySelectorAll('.docx-wrapper > section.docx').length, 1);
+
+    // 1.35x > 1.28x：触发兜底拆页
+    const heavyStage = makeStage(1350);
+    await paginateOverflowDocxSections(heavyStage, metaWithBreak, { measurer });
+    assert.equal(heavyStage.querySelectorAll('.docx-wrapper > section.docx').length, 2);
+  });
+
+  it('keepNext 标题不孤立在页底；跨页续段清除首行缩进/段前距并迁移 fp-sect-end-* 到末片段', async () => {
+    const {
+      DOCX_CONTINUED_PARA_CLASS,
+      DOCX_KEEP_NEXT_CLASS,
+      applyParagraphSplitPostProcess,
+      findBestSplitUnitIndex,
+      paginateOverflowDocxSections,
+    } = await import('../src/utils/docxPaginator.ts');
+    const { DOCX_SECTION_END_CLASS_PREFIX } = await import('../src/utils/docxPageFields.ts');
+    const { MockElement, MockText } = createMockDomEnv();
+
+    // 1. 验证二分查找与跨页样式后处理
+    assert.equal(findBestSplitUnitIndex(100, 45, (u) => Math.ceil(u / 20) * 18), 40);
+    assert.equal(findBestSplitUnitIndex(100, 10, (u) => Math.ceil(u / 20) * 18), 0);
+
+    const head = new MockElement('p', {
+      className: `${DOCX_SECTION_END_CLASS_PREFIX}0`,
+      style: { textIndent: '32px', marginTop: '12px', marginBottom: '12px', textAlign: 'justify' },
+    });
+    const tail = head.cloneNode(false);
+    applyParagraphSplitPostProcess(head, tail, true);
+    assert.equal(head.style.marginBottom, '0px');
+    assert.equal(head.style.textAlignLast, 'justify');
+    assert.equal(head.classList.contains(`${DOCX_SECTION_END_CLASS_PREFIX}0`), false);
+    assert.equal(tail.style.textIndent, '0px');
+    assert.equal(tail.style.marginTop, '0px');
+    assert.equal(tail.classList.contains(DOCX_CONTINUED_PARA_CLASS), true);
+    assert.equal(tail.classList.contains(`${DOCX_SECTION_END_CLASS_PREFIX}0`), true);
+
+    // 2. 验证 keepNext 粘连整组移至下一页 + 三页超长段落连续切分
+    const stage = new MockElement('div');
+    const wrapper = new MockElement('div', { className: 'docx-wrapper' });
+    const section = new MockElement('section', {
+      className: 'docx',
+      height: 1500,
+      style: { minHeight: '300px' },
+    });
+    const article = new MockElement('article');
+
+    const pIntro = new MockElement('p', { height: 180 });
+    pIntro.appendChild(new MockText('引言'));
+    const pHeading = new MockElement('p', {
+      className: DOCX_KEEP_NEXT_CLASS,
+      height: 40,
+    });
+    pHeading.appendChild(new MockText('一、章节标题'));
+    const pBodyAfterHeading = new MockElement('p', { height: 100 });
+    pBodyAfterHeading.appendChild(new MockText('紧随标题的正文'));
+    const pLongMultiPage = new MockElement('p', {
+      height: 550,
+      className: `${DOCX_SECTION_END_CLASS_PREFIX}0`,
+      style: { textIndent: '28px', marginTop: '10px', marginBottom: '10px' },
+    });
+    pLongMultiPage.appendChild(new MockText('超长段落'.repeat(60)));
+
+    article.appendChild(pIntro);
+    article.appendChild(pHeading);
+    article.appendChild(pBodyAfterHeading);
+    article.appendChild(pLongMultiPage);
+    section.appendChild(article);
+    wrapper.appendChild(section);
+    stage.appendChild(wrapper);
+
+    const measurer = {
+      getSectionMinHeightPx: () => 300,
+      getSectionHeightPx: (sec) => sec.offsetHeight,
+      getMaxArticleHeightPx: () => 240,
+      getArticleColumnCount: () => 1,
+      measureBlock: (el) => ({
+        height: el._mockHeight,
+        marginTop: el._mockMarginTop,
+        marginBottom: el._mockMarginBottom,
+      }),
+      splitParagraph: (para, available) => {
+        if (para._mockHeight <= 240 || available < 60) return null;
+        const cut = Math.floor(available / 20) * 20;
+        const remaining = para._mockHeight - cut;
+        if (cut <= 0 || remaining <= 0) return null;
+        para._mockHeight = cut;
+        const nextFrag = para.cloneNode(false);
+        nextFrag._mockHeight = remaining;
+        nextFrag.appendChild(new MockText('续段内容'));
+        applyParagraphSplitPostProcess(para, nextFrag, false);
+        para.parentNode?.insertBefore(nextFrag, para.nextSibling);
+        return { head: para, tail: nextFrag };
+      },
+      splitTable: () => null,
+    };
+
+    await paginateOverflowDocxSections(
+      stage,
+      { hasLastRenderedPageBreak: false, evenAndOddHeaders: false, sectionMetas: [{ sectProps: {} }] },
+      { measurer },
+    );
+
+    const pages = stage.querySelectorAll('.docx-wrapper > section.docx');
+    // 页1: pIntro (180)；页2: pHeading(40)+pBodyAfterHeading(100)+pLong段1(100)；页3: pLong段2(240)；页4: pLong段3(210)
+    assert.equal(pages.length, 4);
+    assert.deepEqual(
+      pages[0].querySelectorAll('p') ? pages[0].children[0].children.map((p) => p.textContent) : [],
+      ['引言'],
+    );
+    assert.equal(pages[1].children[0].children[0], pHeading);
+    assert.equal(pages[1].children[0].children[1], pBodyAfterHeading);
+    // 末片段独占 fp-sect-end-0
+    assert.equal(pages[1].children[0].children[2].classList.contains(`${DOCX_SECTION_END_CLASS_PREFIX}0`), false);
+    assert.equal(pages[2].children[0].children[0].classList.contains(`${DOCX_SECTION_END_CLASS_PREFIX}0`), false);
+    assert.equal(pages[2].children[0].children[0].classList.contains(DOCX_CONTINUED_PARA_CLASS), true);
+    assert.equal(pages[3].children[0].children[0].classList.contains(`${DOCX_SECTION_END_CLASS_PREFIX}0`), true);
+  });
+
+  it('跨页大表格避开 rowSpan 合并行安全切分，并在续表顶部重复 tblHeader 表头行', async () => {
+    const {
+      DOCX_TBL_HEADER_CLASS,
+      computeSafeTableSplitBoundaries,
+      paginateOverflowDocxSections,
+    } = await import('../src/utils/docxPaginator.ts');
+    const { MockElement, MockText } = createMockDomEnv();
+
+    // 1. 验证安全切分边界识别 rowSpan
+    const mkRow = (cells) => {
+      const tr = new MockElement('tr');
+      for (const c of cells) tr.appendChild(c);
+      return tr;
+    };
+    const rA = mkRow([new MockElement('td', { rowSpan: 3 })]);
+    const rB = mkRow([new MockElement('td', { style: { display: 'none' } })]);
+    const rC = mkRow([new MockElement('td', { style: { display: 'none' } })]);
+    const rD = mkRow([new MockElement('td')]);
+    assert.deepEqual(computeSafeTableSplitBoundaries([rA, rB, rC, rD]), [
+      false,
+      false,
+      true,
+      true,
+    ]);
+
+    // 2. 端到端验证默认 splitTable 在跨页时避开 rowSpan=2 并克隆表头行
+    const stageReal = new MockElement('div');
+    const wrapperReal = new MockElement('div', { className: 'docx-wrapper' });
+    const secReal = new MockElement('section', {
+      className: 'docx',
+      height: 500,
+      style: { minHeight: '160px' },
+    });
+    const artReal = new MockElement('article');
+    const tblReal = new MockElement('table', { rect: { top: 0, bottom: 250, height: 250 } });
+    const colgroup = new MockElement('colgroup');
+    colgroup.appendChild(new MockElement('col'));
+    tblReal.appendChild(colgroup);
+
+    // Row 0: 表头 (0..50)
+    // Row 1: 普通数据行1 (50..100)
+    // Row 2: rowSpan=2 合并行起始 (100..150)
+    // Row 3: 被合并行 (150..200) -> 可用高度 160px 时不能在 Row 2 后切分，必须退回到 Row 1 后切分！
+    // Row 4: 普通数据行4 (200..250)
+    const row0 = new MockElement('tr', {
+      className: DOCX_TBL_HEADER_CLASS,
+      height: 50,
+      rect: { top: 0, bottom: 50, height: 50 },
+    });
+    row0.appendChild(new MockElement('td'));
+    const row1 = new MockElement('tr', { height: 50, rect: { top: 50, bottom: 100, height: 50 } });
+    row1.appendChild(new MockElement('td'));
+    const row2 = new MockElement('tr', { height: 50, rect: { top: 100, bottom: 150, height: 50 } });
+    row2.appendChild(new MockElement('td', { rowSpan: 2 }));
+    const row3 = new MockElement('tr', { height: 50, rect: { top: 150, bottom: 200, height: 50 } });
+    row3.appendChild(new MockElement('td', { style: { display: 'none' } }));
+    const row4 = new MockElement('tr', { height: 50, rect: { top: 200, bottom: 250, height: 50 } });
+    row4.appendChild(new MockElement('td'));
+
+    for (const r of [row0, row1, row2, row3, row4]) {
+      tblReal.appendChild(r);
+    }
+    artReal.appendChild(tblReal);
+    secReal.appendChild(artReal);
+    wrapperReal.appendChild(secReal);
+    stageReal.appendChild(wrapperReal);
+
+    const prevGcs = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (el) => ({
+      minHeight: el.style?.minHeight ?? '',
+      borderTopWidth: '0px',
+      borderBottomWidth: '0px',
+      paddingTop: '0px',
+      paddingBottom: '0px',
+      marginTop: el.style?.marginTop ?? '0px',
+      marginBottom: el.style?.marginBottom ?? '0px',
+      columnCount: 'auto',
+    });
+
+    try {
+      await paginateOverflowDocxSections(stageReal, {
+        hasLastRenderedPageBreak: false,
+        evenAndOddHeaders: false,
+        sectionMetas: [{ sectProps: {} }],
+      });
+    } finally {
+      globalThis.getComputedStyle = prevGcs;
+    }
+
+    const tblPages = stageReal.querySelectorAll('.docx-wrapper > section.docx');
+    // 页1: row0(表头) + row1(数据行1)；页2+: 克隆表头 row0 + row2 + row3 (+ row4)
+    assert.ok(tblPages.length >= 2);
+    const page1Table = tblPages[0].children[0].children[0];
+    const page1Rows = page1Table.children.filter((c) => c.tagName === 'TR');
+    assert.equal(page1Rows.length, 2);
+    assert.equal(page1Rows[0].classList.contains(DOCX_TBL_HEADER_CLASS), true);
+
+    const page2Table = tblPages[1].children[0].children[0];
+    const page2Rows = page2Table.children.filter((c) => c.tagName === 'TR');
+    assert.equal(page2Rows[0].classList.contains(DOCX_TBL_HEADER_CLASS), true);
+    assert.equal(page2Rows[1].children[0].rowSpan, 2);
+    assert.equal(page2Rows[2].children[0].style.display, 'none');
+  });
+});
+
+
 
 
 

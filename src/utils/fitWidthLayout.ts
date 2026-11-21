@@ -100,7 +100,7 @@ export function measureScrollContainerBox(
 
   if (typeof getComputedStyle === 'function') {
     try {
-      const cs = getComputedStyle(el as Element);
+      const cs = getComputedStyle(el as unknown as Element);
       if (cs) {
         hasComputedStyle = true;
         padLeft = Number.parseFloat(cs.paddingLeft) || 0;
