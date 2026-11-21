@@ -13,6 +13,7 @@ import {
 } from '../utils/i18n';
 import { createIcon } from '../utils/icons';
 import {
+  attachSegmentedIndicator,
   attachToolbarRovingFocus,
   isImeComposing,
   renderTruncatableFileName,
@@ -579,6 +580,8 @@ export function createToolbar(
 
   const stopPrimaryRoving = attachToolbarRovingFocus(primaryRow);
   const stopSecondaryRoving = attachToolbarRovingFocus(secondaryRow);
+  const pptLayoutIndicator = attachSegmentedIndicator(pptLayoutSeg);
+  const htmlModeIndicator = attachSegmentedIndicator(htmlModeSeg);
 
   function setButtonAriaDisabled(btn: HTMLButtonElement, disabled: boolean): void {
     btn.setAttribute('aria-disabled', String(disabled));
@@ -781,6 +784,7 @@ export function createToolbar(
   });
 
   function update(state: ToolbarRenderState): void {
+    const wasVisible = !root.hidden;
     latestState = state;
     root.hidden = !state.visible;
     if (!state.visible) {
@@ -837,6 +841,9 @@ export function createToolbar(
       return;
     }
 
+    const wasPptVisible = !pptGroup.hidden;
+    const wasHtmlVisible = !htmlGroup.hidden;
+
     const isPaged = file.kind === 'ppt' || file.kind === 'pdf' || file.kind === 'excel';
     pptGroup.hidden = !isPaged;
     wordGroup.hidden = file.kind !== 'word';
@@ -844,10 +851,16 @@ export function createToolbar(
 
     if (isPaged) {
       updatePagedControls(state.preview, file.kind);
+      if (!wasVisible || !wasPptVisible) {
+        pptLayoutIndicator.update(true);
+      }
     } else if (file.kind === 'word') {
       updateWordControls(state.preview);
     } else {
       updateHtmlControls(state.preview, file);
+      if (!wasVisible || !wasHtmlVisible) {
+        htmlModeIndicator.update(true);
+      }
     }
   }
 
@@ -882,6 +895,8 @@ export function createToolbar(
     stopLocaleSync();
     stopPrimaryRoving();
     stopSecondaryRoving();
+    pptLayoutIndicator.destroy();
+    htmlModeIndicator.destroy();
     window.removeEventListener('keydown', handleGlobalFindShortcut);
     root.remove();
   }

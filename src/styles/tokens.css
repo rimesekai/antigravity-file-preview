@@ -40,6 +40,7 @@
   /* 主色柔和容器（仅用于焦点装饰或状态角标，绝不铺满普通大卡片） */
   --fc-primary-tint: color-mix(in oklab, var(--fc-primary) 12%, var(--fc-surface-card));
   --fc-primary-tint-strong: color-mix(in oklab, var(--fc-primary) 18%, var(--fc-surface-card));
+  --fc-series-2: color-mix(in oklab, var(--fc-primary) 45%, var(--fc-surface-card));
 
   /* ------------------------------------------------------------------
    * 3. 四层无边框表面层级 (page -> card -> block -> inset) + chrome
@@ -100,6 +101,7 @@
   --fc-error: light-dark(#dc2626, #f87171);
   --fc-error-container: light-dark(#fee2e2, #521818);
   --fc-on-error-container: light-dark(#7f1d1d, #fee2e2);
+  --fc-destructive: light-dark(#ff3b30, #ff453a);
 
   /* ------------------------------------------------------------------
    * 6. 字体栈与排版
@@ -339,6 +341,7 @@
     --fc-error: #dc2626;
     --fc-error-container: #fee2e2;
     --fc-on-error-container: #7f1d1d;
+    --fc-destructive: #ff3b30;
   }
 
   :root[data-resolved-theme="dark"] {
@@ -362,5 +365,6 @@
     --fc-error: #f87171;
     --fc-error-container: #521818;
     --fc-on-error-container: #fee2e2;
+    --fc-destructive: #ff453a;
   }
 }

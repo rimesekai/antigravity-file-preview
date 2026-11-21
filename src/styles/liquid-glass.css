@@ -1,0 +1,219 @@
+/**
+ * FlClash Liquid Glass 五层真实光学系统（提炼自 D:/ui-resources/flclash-ui/css/liquid-glass.css）
+ *
+ * 五层光学结构：
+ * 1. 边缘环形倒角折射 + RGB 边缘棱镜色散（Chromium 由 liquidGlass.ts 注入 SVG feDisplacementMap，其余内核平滑降级）
+ * 2. 低模糊高饱和透射底色（regular: blur 2.5px + sat 2.08/2.65；pill: blur 11px；menu: blur 15px；lens: blur 0.4px）
+ * 3. iOS 27 上下定向镜面高光环 + 4.5px 柔和尾光（normal.y^2 衰减，圆角两端自然收暗）
+ * 4. 0.75px 极细外圈暗描边（托出真实玻璃切面厚度）
+ * 5. 跟手高斯按压辉光（120ms 亮起 / 180ms 悬停 / 360ms 淡出）
+ */
+
+:root {
+  --fc-lg-tint-regular: rgba(253, 253, 253, 0.62);
+  --fc-lg-tint-pill: rgba(244, 244, 244, 0.64);
+  --fc-lg-tint-menu: rgba(250, 251, 253, 0.72);
+  --fc-lg-tint-tinted: color-mix(in srgb, var(--fc-primary) 78%, transparent);
+
+  --fc-lg-sat-regular: 2.08;
+  --fc-lg-sat-pill: 2.1;
+  --fc-lg-sat-menu: 1.95;
+
+  --fc-lg-rim-top: rgba(255, 255, 255, 0.88);
+  --fc-lg-rim-bottom: rgba(255, 255, 255, 0.56);
+  --fc-lg-rim-side: rgba(255, 255, 255, 0.14);
+  --fc-lg-tail: rgba(255, 255, 255, 0.34);
+  --fc-lg-hairline: rgba(0, 0, 0, 0.12);
+  --fc-lg-hairline-side: rgba(0, 0, 0, 0.18);
+  --fc-lg-glow-color: rgba(255, 255, 255, 0.52);
+
+  @supports (color: light-dark(white, black)) {
+    --fc-lg-tint-regular: light-dark(rgba(253, 253, 253, 0.62), rgba(54, 50, 46, 0.64));
+    --fc-lg-tint-pill: light-dark(rgba(244, 244, 244, 0.64), rgba(54, 50, 46, 0.58));
+    --fc-lg-tint-menu: light-dark(rgba(250, 251, 253, 0.72), rgba(44, 40, 37, 0.76));
+    --fc-lg-rim-top: light-dark(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.42));
+    --fc-lg-rim-bottom: light-dark(rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.22));
+    --fc-lg-rim-side: light-dark(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+    --fc-lg-tail: light-dark(rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.14));
+    --fc-lg-hairline: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.44));
+    --fc-lg-hairline-side: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.55));
+    --fc-lg-glow-color: light-dark(rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.26));
+  }
+}
+
+@supports not (color: light-dark(white, black)) {
+  :root[data-resolved-theme="dark"] {
+    --fc-lg-tint-regular: rgba(54, 50, 46, 0.64);
+    --fc-lg-tint-pill: rgba(54, 50, 46, 0.58);
+    --fc-lg-tint-menu: rgba(44, 40, 37, 0.76);
+    --fc-lg-rim-top: rgba(255, 255, 255, 0.42);
+    --fc-lg-rim-bottom: rgba(255, 255, 255, 0.22);
+    --fc-lg-rim-side: rgba(255, 255, 255, 0.06);
+    --fc-lg-tail: rgba(255, 255, 255, 0.14);
+    --fc-lg-hairline: rgba(0, 0, 0, 0.44);
+    --fc-lg-hairline-side: rgba(0, 0, 0, 0.55);
+    --fc-lg-glow-color: rgba(255, 255, 255, 0.26);
+  }
+}
+
+:root[data-resolved-theme="dark"] {
+  --fc-lg-sat-regular: 2.65;
+  --fc-lg-sat-pill: 1.95;
+  --fc-lg-sat-menu: 1.8;
+}
+
+/* 零权重兜底 position，避免覆盖 fixed / absolute 浮层自身定位 */
+:where(.fc-glass) {
+  position: relative;
+}
+
+/* 保证液态玻璃内子元素位于径向辉光层 (z-index: 1) 与高光边框 (z-index: 2) 之上 */
+:where(.fc-glass > *) {
+  position: relative;
+  z-index: 3;
+}
+
+/* 仅当开启全局 Liquid Glass 时激活五层光学玻璃材质 */
+:root[data-liquid-glass="true"] .fc-glass {
+  --fc-lg-filter: ;
+  --fc-lg-blur: 3px;
+  --fc-lg-sat: var(--fc-lg-sat-regular);
+  --fc-lg-bright: 1.02;
+  --fc-lg-bg: var(--fc-lg-tint-regular);
+
+  isolation: isolate;
+  background-color: var(--fc-lg-bg);
+  backdrop-filter: blur(var(--fc-lg-blur)) saturate(var(--fc-lg-sat)) brightness(var(--fc-lg-bright)) var(--fc-lg-filter);
+  -webkit-backdrop-filter: blur(var(--fc-lg-blur)) saturate(var(--fc-lg-sat)) brightness(var(--fc-lg-bright));
+  box-shadow:
+    /* 0.75px 玻璃外切面暗描边 */
+    0 0 0 0.75px var(--fc-lg-hairline),
+    /* 4.5px 上下定向内尾光 */
+    inset 0 1.2px 0.8px var(--fc-lg-rim-top),
+    inset 0 -1px 0.8px var(--fc-lg-rim-bottom),
+    inset 0 4.5px 7px -4px var(--fc-lg-tail),
+    inset 0 -4.5px 7px -4px color-mix(in srgb, var(--fc-lg-tail) 60%, transparent),
+    /* 外投影 */
+    var(--fc-shadow-e2);
+}
+
+/* 镜面折射高光环：仅亮上下缘，两侧随圆角自然收暗 */
+:root[data-liquid-glass="true"] .fc-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.25px;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(
+    180deg,
+    var(--fc-lg-rim-top) 0%,
+    var(--fc-lg-rim-side) 36%,
+    var(--fc-lg-rim-side) 64%,
+    var(--fc-lg-rim-bottom) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+/* 跟手交互辉光层：120ms 按下点亮 / 180ms 悬停 / 360ms 淡出 */
+:root[data-liquid-glass="true"] .fc-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  background:
+    radial-gradient(
+      circle 110px at var(--fc-gx, 50%) var(--fc-gy, 50%),
+      var(--fc-lg-glow-color) 0%,
+      color-mix(in srgb, var(--fc-lg-glow-color) 25%, transparent) 46%,
+      transparent 76%
+    );
+  transition: opacity 360ms var(--fc-ease-standard);
+}
+
+:root[data-liquid-glass="true"] .fc-glass[data-glass-hover="true"]::after {
+  opacity: 0.48;
+  transition-duration: 180ms;
+}
+
+:root[data-liquid-glass="true"] .fc-glass[data-glass-pressed="true"]::after {
+  opacity: 0.92;
+  transition-duration: 120ms;
+}
+
+/* 五种光学材质预设 */
+:root[data-liquid-glass="true"] .fc-glass--regular {
+  --fc-lg-blur: 2.5px;
+  --fc-lg-sat: var(--fc-lg-sat-regular);
+  --fc-lg-bg: var(--fc-lg-tint-regular);
+}
+
+:root[data-liquid-glass="true"] .fc-glass--pill {
+  --fc-lg-blur: 11px;
+  --fc-lg-sat: var(--fc-lg-sat-pill);
+  --fc-lg-bg: var(--fc-lg-tint-pill);
+}
+
+:root[data-liquid-glass="true"] .fc-glass--menu {
+  --fc-lg-blur: 15px;
+  --fc-lg-sat: var(--fc-lg-sat-menu);
+  --fc-lg-bright: 1.04;
+  --fc-lg-bright: light-dark(1.04, 1.16);
+  --fc-lg-bg: var(--fc-lg-tint-menu);
+}
+
+:root[data-liquid-glass="true"] .fc-glass--tinted {
+  --fc-lg-blur: 3px;
+  --fc-lg-sat: 1.35;
+  --fc-lg-bg: var(--fc-lg-tint-tinted);
+  color: var(--fc-on-primary);
+}
+
+:root[data-liquid-glass="true"] .fc-glass--lens {
+  --fc-lg-blur: 0.4px;
+  --fc-lg-sat: 1.25;
+  --fc-lg-bright: 1.03;
+  --fc-lg-bright: light-dark(1.03, 1.14);
+  --fc-lg-bg: rgba(255, 255, 255, 0.08);
+  --fc-lg-bg: light-dark(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.06));
+  box-shadow:
+    0 0 0 0.75px var(--fc-lg-hairline-side),
+    inset 0 1.4px 1px rgba(255, 255, 255, 0.92),
+    inset 0 -1.4px 1.2px rgba(255, 255, 255, 0.48),
+    inset 0 5px 8px -4px rgba(255, 255, 255, 0.45),
+    0 12px 32px -6px rgba(0, 0, 0, 0.24);
+}
+
+/* 减少动态效果时关闭跟手径向光斑追踪，保持静态镜面玻璃层次 */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-liquid-glass="true"] .fc-glass::after {
+    display: none;
+  }
+}
+
+/* Windows 高对比度模式：禁用模糊与装饰伪元素，回退清晰实体边框 */
+@media (forced-colors: active) {
+  :root[data-liquid-glass="true"] .fc-glass {
+    border: 1px solid CanvasText;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: Canvas;
+    box-shadow: none;
+  }
+
+  :root[data-liquid-glass="true"] .fc-glass::before,
+  :root[data-liquid-glass="true"] .fc-glass::after {
+    display: none;
+  }
+}

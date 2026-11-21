@@ -154,6 +154,16 @@ textarea {
   color: var(--fc-on-surface);
 }
 
+.fp-shell-stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+}
+
 .fc-card {
   position: relative;
   background-color: var(--fc-surface-card);
@@ -639,6 +649,8 @@ textarea {
 
 .fp-segmented,
 .fc-segmented {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -654,8 +666,37 @@ textarea {
   border-radius: var(--fc-radius-tab);
 }
 
+/* 贯穿滑动的物理高光胶囊（对标 FlClash SegmentedControl AnimatedAlign） */
+.fc-segmented__indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-radius: var(--fc-radius-pill);
+  background-color: var(--fc-primary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--fc-primary) 30%, transparent);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  will-change: transform, width, height;
+}
+
+.fc-segmented--compact .fc-segmented__indicator {
+  border-radius: 11px;
+}
+
+:root[data-liquid-glass="true"] .fc-segmented__indicator {
+  box-shadow:
+    inset 0 1px 0.8px rgba(255, 255, 255, 0.42),
+    inset 0 -0.8px 0.6px rgba(0, 0, 0, 0.16),
+    0 2px 10px color-mix(in srgb, var(--fc-primary) 34%, transparent);
+}
+
 .fp-seg-btn,
 .fc-segmented__btn {
+  position: relative;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -681,6 +722,11 @@ textarea {
 .fp-seg-btn[aria-pressed="true"],
 .fc-segmented__btn[aria-pressed="true"] {
   background-color: var(--fc-primary);
+  color: var(--fc-on-primary);
+}
+
+:is(.fp-segmented, .fc-segmented):has(> .fc-segmented__indicator) > :is(.fp-seg-btn, .fc-segmented__btn)[aria-pressed="true"] {
+  background-color: transparent;
   color: var(--fc-on-primary);
 }
 
@@ -884,6 +930,17 @@ textarea {
 /* Hero 概览卡 */
 .fp-hero {
   padding: 18px 18px 16px;
+}
+
+.fp-hero__deco {
+  position: absolute;
+  right: -46px;
+  top: -54px;
+  width: 176px;
+  height: 176px;
+  color: var(--fc-primary-tint);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .fp-hero__inner {
@@ -1189,6 +1246,7 @@ textarea {
 .fc-tab[aria-selected="true"] {
   background-color: var(--fc-primary);
   color: var(--fc-on-primary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--fc-primary) 26%, transparent);
 }
 
 .fc-tab[aria-selected="true"] .fc-tab__count {
@@ -1369,6 +1427,8 @@ dialog.fp-drawer-dialog[open]::backdrop {
   width: min(370px, 88vw);
   background-color: var(--fc-surface-chrome);
   border-right: 1px solid var(--fc-divider);
+  border-top-right-radius: 22px;
+  border-bottom-right-radius: 22px;
   box-shadow: var(--fc-shadow-e2);
   display: flex;
   flex-direction: column;
@@ -1391,14 +1451,6 @@ dialog.fp-drawer-dialog[open]::backdrop {
   max-height: calc(100dvh - 20px);
   overflow-y: auto;
   z-index: 80;
-}
-
-:root[data-liquid-glass="true"] .fp-appearance-popover {
-  background-color: var(--fc-glass-bg);
-  backdrop-filter: var(--fc-glass-blur);
-  box-shadow:
-    inset 0 1px 0 var(--fc-glass-edge),
-    var(--fc-shadow-e2);
 }
 
 .fp-appearance-popover[popover] {
@@ -1634,15 +1686,32 @@ dialog.fp-drawer-dialog[open]::backdrop {
   border-radius: var(--fc-radius-pill);
   background-color: var(--fc-surface-floating);
   box-shadow: var(--fc-shadow-e2);
+  overflow: hidden;
 }
 
 .fp-spinner {
   width: 20px;
   height: 20px;
-  border-radius: 50%;
-  border: 2.5px solid var(--fc-surface-inset);
-  border-top-color: var(--fc-primary);
+  color: var(--fc-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+}
+
+.fp-spinner-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fp-spinner-track {
+  opacity: 0.2;
+}
+
+.fp-spinner-arc {
+  stroke-dasharray: 42 20;
+  stroke-dashoffset: 0;
 }
 
 .fp-loading-text {
@@ -1788,15 +1857,7 @@ dialog.fp-drawer-dialog[open]::backdrop {
   background-color: var(--fc-surface-floating);
   box-shadow: var(--fc-shadow-e2);
   user-select: none;
-}
-
-:root[data-liquid-glass="true"] .fp-selection-bar,
-:root[data-liquid-glass="true"] .fp-toast {
-  background-color: var(--fc-glass-bg);
-  backdrop-filter: var(--fc-glass-blur);
-  box-shadow:
-    inset 0 1px 0 var(--fc-glass-edge),
-    var(--fc-shadow-e2);
+  overflow: hidden;
 }
 
 .fp-sel-meta {
@@ -1876,9 +1937,21 @@ dialog.fp-drawer-dialog[open]::backdrop {
   text-overflow: ellipsis;
 }
 
+:root[data-liquid-glass="true"] .fp-sent-badge {
+  background-color: color-mix(in srgb, var(--fc-success) 84%, transparent);
+  backdrop-filter: blur(8px) saturate(1.4);
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0.8px rgba(255, 255, 255, 0.48),
+    inset 0 -0.8px 0.6px rgba(0, 0, 0, 0.16),
+    var(--fc-shadow-e2);
+}
+
 .fp-toast {
   position: absolute;
-  left: 50%;
+  inset-inline: 12px;
+  margin-inline: auto;
+  width: fit-content;
   bottom: 16px;
   z-index: 50;
   max-width: min(360px, calc(100% - 24px));
@@ -1895,11 +1968,21 @@ dialog.fp-drawer-dialog[open]::backdrop {
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
-  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 180ms var(--fc-ease-standard);
+}
+
+.fp-toast.is-visible {
+  opacity: 1;
 }
 
 .fp-toast.is-error {
   background-color: var(--fc-error-container);
+  color: var(--fc-on-error-container);
+}
+
+:root[data-liquid-glass="true"] .fp-toast.is-error {
+  --fc-lg-bg: color-mix(in srgb, var(--fc-error-container) 86%, transparent);
   color: var(--fc-on-error-container);
 }
 
@@ -1997,6 +2080,7 @@ dialog.fp-drawer-dialog[open]::backdrop {
   transition:
     background-color var(--fc-duration-fast) var(--fc-ease-standard),
     color var(--fc-duration-fast) var(--fc-ease-standard),
+    box-shadow var(--fc-duration-fast) var(--fc-ease-standard),
     opacity var(--fc-duration-fast) var(--fc-ease-standard);
 }
 
@@ -2039,6 +2123,45 @@ dialog.fp-drawer-dialog[open]::backdrop {
 
 /* 空间位移、缩放、液滴弹簧与持续呼吸/旋转动画仅在无减少动态偏好时启用 */
 @media (prefers-reduced-motion: no-preference) {
+  /* 抽屉展开时底层舞台轻微退行缩放（复刻 FlClash PageTransition recededShrink） */
+  .fp-shell-stage {
+    transition:
+      transform var(--fc-duration-normal) var(--fc-ease-push),
+      border-radius var(--fc-duration-normal) var(--fc-ease-push),
+      filter var(--fc-duration-normal) var(--fc-ease-standard);
+  }
+
+  .fp-shell:has(dialog.fp-drawer-dialog[open]) .fp-shell-stage {
+    transform: scale(0.986);
+    border-radius: 14px;
+    overflow: hidden;
+    filter: brightness(0.96);
+  }
+
+  /* 分段控制器连续滑动物理胶囊 */
+  .fc-segmented__indicator[data-ready="true"] {
+    transition:
+      transform 260ms cubic-bezier(0.2, 0, 0, 1),
+      width 260ms cubic-bezier(0.2, 0, 0, 1),
+      height 260ms cubic-bezier(0.2, 0, 0, 1),
+      background-color var(--fc-duration-normal) var(--fc-ease-standard);
+  }
+
+  /* Hero Cookie-9 几何水印柔和动态 */
+  .fp-hero__deco {
+    transition:
+      transform 600ms var(--fc-ease-spring),
+      color var(--fc-duration-normal) var(--fc-ease-standard);
+  }
+
+  .fp-hero:hover .fp-hero__deco {
+    transform: rotate(14deg) scale(1.05);
+  }
+
+  .fp-hero.is-scanning .fp-hero__deco {
+    animation: fp-spin 8s linear infinite;
+  }
+
   .fp-btn,
   .fc-icon-btn,
   .fp-sel-btn,
@@ -2048,6 +2171,7 @@ dialog.fp-drawer-dialog[open]::backdrop {
     transition:
       background-color var(--fc-duration-fast) var(--fc-ease-standard),
       color var(--fc-duration-fast) var(--fc-ease-standard),
+      box-shadow var(--fc-duration-fast) var(--fc-ease-standard),
       opacity var(--fc-duration-fast) var(--fc-ease-standard),
       transform var(--fc-duration-normal) var(--fc-ease-droplet);
   }
@@ -2111,43 +2235,70 @@ dialog.fp-drawer-dialog[open]::backdrop {
     animation: fp-spin 0.8s linear infinite;
   }
 
-  .fp-spinner {
-    animation: fp-spin 0.75s linear infinite;
+  .fp-spinner-svg {
+    animation: fp-spin 0.85s linear infinite;
   }
 
-  .fp-welcome-host:not([hidden]) {
+  .fp-welcome-host:not([hidden]),
+  .fp-preview-host:not([hidden]) {
     animation: fp-view-enter var(--fc-duration-tab) cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  .fp-file-list.is-tab-switching {
+    animation: fp-view-enter 180ms var(--fc-ease-standard);
+  }
+
   .fp-drop-overlay:not([hidden]) .fp-drop-box {
-    animation: fp-pop-in 180ms var(--fc-ease-spring);
+    animation: fp-pop-in 200ms var(--fc-ease-spring);
   }
 
   .fp-selection-bar {
     animation: fp-pop-in 160ms var(--fc-ease-spring);
   }
 
-  .fp-toast {
-    animation: fp-toast-up 200ms var(--fc-ease-spring);
+  .fp-sent-badge {
+    animation: fp-pop-in 180ms var(--fc-ease-spring);
   }
 
-  .fp-appearance-popover[popover] {
-    translate: 0 -6px;
+  .fp-toast {
+    transform: translateY(10px) scale(0.96);
     transition:
-      opacity var(--fc-duration-fast) var(--fc-ease-standard),
-      translate var(--fc-duration-normal) var(--fc-ease-push),
-      display var(--fc-duration-fast) var(--fc-ease-standard),
-      overlay var(--fc-duration-fast) var(--fc-ease-standard);
+      opacity 200ms var(--fc-ease-standard),
+      transform 240ms var(--fc-ease-spring);
+  }
+
+  .fp-toast.is-visible {
+    transform: translateY(0) scale(1);
+  }
+
+  /* 弹出面板从触发锚点方向弹性展开（遵循 natural-interactions 与 animate-to-from-top-layer） */
+  .fp-appearance-popover[popover] {
+    scale: 0.94;
+    translate: 0 -6px;
+    transition-property: opacity, scale, translate, display, overlay;
+    transition-duration: 240ms;
+    transition-timing-function: ease-out;
+    transition-timing-function: linear(0, 0.32 14%, 0.86 34%, 1.04 54%, 0.99 76%, 1);
     transition-behavior: allow-discrete;
   }
 
+  .fp-appearance-popover[popover][data-open-direction="up"] {
+    translate: 0 6px;
+  }
+
   .fp-appearance-popover[popover]:popover-open {
+    scale: 1;
     translate: 0 0;
   }
 
   @starting-style {
     .fp-appearance-popover[popover]:popover-open {
+      scale: 0.94;
       translate: 0 -6px;
+    }
+
+    .fp-appearance-popover[popover][data-open-direction="up"]:popover-open {
+      translate: 0 6px;
     }
   }
 
@@ -2185,17 +2336,6 @@ dialog.fp-drawer-dialog[open]::backdrop {
     to {
       opacity: 1;
       transform: translateY(0) scale(1);
-    }
-  }
-
-  @keyframes fp-toast-up {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
     }
   }
 }
@@ -2306,9 +2446,13 @@ dialog.fp-drawer-dialog[open]::backdrop {
   .fp-btn-files[aria-expanded="true"],
   .fc-selection-badge {
     forced-color-adjust: none;
-    background-color: Highlight;
-    color: HighlightText;
+    background-color: Highlight !important;
+    color: HighlightText !important;
     border-color: Highlight;
+  }
+
+  .fc-segmented__indicator {
+    display: none;
   }
 
   .fc-switch input[type="checkbox"] {

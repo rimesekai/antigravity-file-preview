@@ -1,4 +1,5 @@
 import './styles/tokens.css';
+import './styles/liquid-glass.css';
 import './styles.css';
 import './renderers/renderers.css';
 import type {
@@ -28,9 +29,15 @@ import {
   statFile,
 } from './services/sidecarClient';
 import {
+  attachLiquidGlass,
+  refreshAllLiquidGlass,
+  refreshLiquidGlass,
+} from './services/liquidGlass';
+import {
   cycleThemePreference,
   getThemePreference,
   startThemeSync,
+  subscribeAppearanceChanges,
   subscribeWorkspaceChanges,
 } from './services/themeSync';
 import { createAppearancePopover } from './components/AppearancePopover';
@@ -156,9 +163,12 @@ function bootstrap(): void {
   loadingOverlay.hidden = true;
   const loadingCard = document.createElement('div');
   loadingCard.className = 'fp-loading-card';
-  loadingCard.innerHTML = `<div class="fp-spinner" aria-hidden="true"></div><div class="fp-loading-text">${tr('正在加载并渲染文档...', 'Loading and rendering document...')}</div>`;
+  loadingCard.setAttribute('role', 'status');
+  loadingCard.setAttribute('aria-live', 'polite');
+  loadingCard.innerHTML = `<div class="fp-spinner" aria-hidden="true"><svg class="fp-spinner-svg" viewBox="0 0 24 24"><circle class="fp-spinner-track" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5"/><circle class="fp-spinner-arc" cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div><div class="fp-loading-text">${tr('正在加载并渲染文档...', 'Loading and rendering document...')}</div>`;
   loadingOverlay.appendChild(loadingCard);
   const loadingTextEl = loadingCard.querySelector('.fp-loading-text') as HTMLElement;
+  const detachLoadingGlass = attachLiquidGlass(loadingCard, 'pill');
 
   const errorCardHost = document.createElement('div');
   errorCardHost.className = 'fp-error-host';
@@ -169,6 +179,7 @@ function bootstrap(): void {
   toastEl.setAttribute('role', 'status');
   toastEl.setAttribute('aria-live', 'polite');
   toastEl.hidden = true;
+  const detachToastGlass = attachLiquidGlass(toastEl, 'pill');
 
   previewHost.append(rendererContainer, loadingOverlay, errorCardHost, toastEl);
 
@@ -197,6 +208,7 @@ function bootstrap(): void {
   dropSubEl.className = 'fp-drop-sub';
   dropBox.append(dropIconWell, dropTitleEl, dropSubEl);
   dropOverlay.appendChild(dropBox);
+  const detachDropGlass = attachLiquidGlass(dropBox, 'menu');
 
   const applyStaticShellLocale = (): void => {
     drawerDialog.setAttribute('aria-label', tr('工作区文档列表', 'Workspace file list'));
@@ -214,8 +226,11 @@ function bootstrap(): void {
   fallbackFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.html,.htm';
   fallbackFileInput.hidden = true;
 
+  const shellStage = document.createElement('div');
+  shellStage.className = 'fp-shell-stage';
   mainStage.append(welcomeHost, previewHost);
-  shell.append(toolbarHost, mainStage, drawerDialog, dropOverlay, fallbackFileInput);
+  shellStage.append(toolbarHost, mainStage);
+  shell.append(shellStage, drawerDialog, dropOverlay, fallbackFileInput);
   appRoot.appendChild(shell);
 
   const appearancePopover = createAppearancePopover(shell);
@@ -236,19 +251,35 @@ function bootstrap(): void {
   let isPollingStat = false;
   let loadRequestSeq = 0;
   let toastTimer: number | null = null;
+  let toastHideTimer: number | null = null;
 
-  /** 在预览区底部展示轻提示，2.6 秒后自动隐藏。 */
+  /** 在预览区底部展示轻提示，2.6 秒后平滑淡出隐藏。 */
   function showToast(message: string, isError = false): void {
     if (toastTimer !== null) {
       window.clearTimeout(toastTimer);
       toastTimer = null;
     }
+    if (toastHideTimer !== null) {
+      window.clearTimeout(toastHideTimer);
+      toastHideTimer = null;
+    }
     toastEl.textContent = message;
     toastEl.classList.toggle('is-error', isError);
     toastEl.hidden = false;
+    toastEl.classList.remove('is-visible');
+    void toastEl.offsetWidth;
+    toastEl.classList.add('is-visible');
+    refreshLiquidGlass(toastEl);
+
     toastTimer = window.setTimeout(() => {
-      toastEl.hidden = true;
       toastTimer = null;
+      toastEl.classList.remove('is-visible');
+      toastHideTimer = window.setTimeout(() => {
+        toastHideTimer = null;
+        if (!toastEl.classList.contains('is-visible')) {
+          toastEl.hidden = true;
+        }
+      }, 220);
     }, 2600);
   }
 
@@ -531,6 +562,9 @@ function bootstrap(): void {
     welcomeHost.hidden = viewMode !== 'welcome';
     previewHost.hidden = viewMode !== 'preview';
     loadingOverlay.hidden = !isLoading;
+    if (isLoading) {
+      refreshLiquidGlass(loadingCard);
+    }
 
     const showDrawer = viewMode === 'preview' && drawerOpen;
     syncDrawerDialog(showDrawer);
@@ -953,6 +987,7 @@ function bootstrap(): void {
     e.preventDefault();
     dragDepth += 1;
     dropOverlay.hidden = false;
+    refreshLiquidGlass(dropBox);
   });
 
   window.addEventListener('dragover', (e) => {
@@ -1030,8 +1065,11 @@ function bootstrap(): void {
   document.addEventListener('visibilitychange', handleVisibilityOrFocus);
   window.addEventListener('focus', handleVisibilityOrFocus);
 
-  // 启动主题、语言与工作区事件同步
+  // 启动主题、外观、语言与工作区事件同步
   const stopThemeSync = startThemeSync();
+  const stopAppearanceGlassSync = subscribeAppearanceChanges(() => {
+    refreshAllLiquidGlass();
+  });
   const stopLocaleSync = onLocaleChange(() => {
     applyStaticShellLocale();
     if (isLoading) {
@@ -1051,9 +1089,17 @@ function bootstrap(): void {
       window.clearTimeout(toastTimer);
       toastTimer = null;
     }
+    if (toastHideTimer !== null) {
+      window.clearTimeout(toastHideTimer);
+      toastHideTimer = null;
+    }
     stopThemeSync();
+    stopAppearanceGlassSync();
     stopLocaleSync();
     stopWorkspaceSync();
+    detachLoadingGlass();
+    detachToastGlass();
+    detachDropGlass();
     appearancePopover.destroy();
     selectionToolbar.destroy();
     destroyActiveRenderer();

@@ -98,7 +98,15 @@ export function createWorkspaceBrowser(
   // 1. 欢迎页 Hero 概览卡片
   // =========================================================================
   const hero = document.createElement('section');
-  hero.className = 'fp-hero fc-card';
+  hero.className = 'fp-hero fc-card fc-card--clip';
+
+  // FlClash Material 3 Expressive Cookie-9 有机几何水印装饰
+  const heroDeco = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  heroDeco.setAttribute('class', 'fp-hero__deco');
+  heroDeco.setAttribute('viewBox', '0 0 100 100');
+  heroDeco.setAttribute('aria-hidden', 'true');
+  heroDeco.innerHTML =
+    '<path fill="currentColor" d="M 43.14 5.67 Q 50.00 1.00 56.86 5.67 L 57.43 6.05 Q 64.30 10.72 72.55 11.56 L 73.24 11.63 Q 81.50 12.46 83.75 20.45 L 83.94 21.11 Q 86.20 29.10 91.99 35.05 L 92.47 35.54 Q 98.26 41.49 94.85 49.06 L 94.57 49.69 Q 91.16 57.26 91.77 65.53 L 91.83 66.22 Q 92.44 74.50 84.96 78.11 L 84.34 78.41 Q 76.87 82.02 72.02 88.75 L 71.61 89.31 Q 66.76 96.04 58.71 94.01 L 58.04 93.84 Q 50.00 91.80 41.96 93.84 L 41.29 94.01 Q 33.24 96.04 28.39 89.31 L 27.98 88.75 Q 23.13 82.02 15.66 78.41 L 15.04 78.11 Q 7.56 74.50 8.17 66.22 L 8.23 65.53 Q 8.84 57.26 5.43 49.69 L 5.15 49.06 Q 1.74 41.49 7.53 35.54 L 8.01 35.05 Q 13.80 29.10 16.06 21.11 L 16.25 20.45 Q 18.50 12.46 26.76 11.63 L 27.45 11.56 Q 35.70 10.72 42.57 6.05 Z"/>';
 
   const heroInner = document.createElement('div');
   heroInner.className = 'fp-hero__inner';
@@ -174,7 +182,7 @@ export function createWorkspaceBrowser(
 
   heroMetaRow.append(heroStatusChip, heroFormatsText);
   heroInner.append(heroTopRow, heroMetaRow);
-  hero.append(heroInner);
+  hero.append(heroDeco, heroInner);
 
   // =========================================================================
   // 2. 抽屉模式标题栏（仅在 drawer 模式显示）
@@ -339,9 +347,15 @@ export function createWorkspaceBrowser(
 
     btn.append(labelSpan, countSpan);
     btn.addEventListener('click', () => {
+      const changed = currentFilter !== key;
       currentFilter = key;
       btn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       renderFileList();
+      if (changed) {
+        listBody.classList.remove('is-tab-switching');
+        void listBody.offsetWidth;
+        listBody.classList.add('is-tab-switching');
+      }
     });
     filterButtons.set(key, { btn, label: labelSpan, count: countSpan });
     filterTabs.appendChild(btn);
@@ -582,6 +596,7 @@ export function createWorkspaceBrowser(
     latestState = state;
     root.dataset.mode = state.mode;
     hero.hidden = state.mode !== 'welcome';
+    hero.classList.toggle('is-scanning', state.loading);
     drawerHeader.hidden = state.mode !== 'drawer';
     listTopBar.hidden = state.mode === 'drawer';
     refreshListBtn.disabled = state.loading;

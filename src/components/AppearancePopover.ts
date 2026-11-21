@@ -1,3 +1,4 @@
+import { attachLiquidGlass, refreshLiquidGlass } from '../services/liquidGlass';
 import {
   SEED_PRESETS,
   type ColorStyle,
@@ -17,6 +18,7 @@ import {
   tr,
 } from '../utils/i18n';
 import { createIcon } from '../utils/icons';
+import { attachSegmentedIndicator } from '../utils/uiHelpers';
 
 export interface AppearancePopoverController {
   toggle: (anchorEl: HTMLElement) => void;
@@ -247,6 +249,10 @@ export function createAppearancePopover(hostEl: HTMLElement = document.body): Ap
   panelEl.append(headerEl, themeSection, seedSection, styleSection, togglesGroup, langSection);
   hostEl.appendChild(panelEl);
 
+  const detachGlass = attachLiquidGlass(panelEl, 'menu');
+  const styleIndicator = attachSegmentedIndicator(styleSeg);
+  const langIndicator = attachSegmentedIndicator(langSeg);
+
   let currentAnchor: HTMLElement | null = null;
   let manualOpen = false;
   let destroyed = false;
@@ -333,6 +339,12 @@ export function createAppearancePopover(hostEl: HTMLElement = document.body): Ap
 
     panelEl.style.top = `${Math.round(top)}px`;
     panelEl.style.left = `${Math.round(left)}px`;
+
+    // 对齐触发按钮方向作为缩放弹出原点（遵循 natural-interactions 指南）
+    const anchorCenterX = rect.left + rect.width / 2;
+    const originX = Math.max(20, Math.min(panelWidth - 20, anchorCenterX - left));
+    panelEl.style.transformOrigin = `${Math.round(originX)}px ${openAbove ? 'bottom' : 'top'}`;
+    panelEl.dataset.openDirection = openAbove ? 'up' : 'down';
   }
 
   function isOpen(): boolean {
@@ -375,6 +387,9 @@ export function createAppearancePopover(hostEl: HTMLElement = document.body): Ap
       panelEl.hidden = false;
     }
     positionNearAnchor(anchor);
+    styleIndicator.update(true);
+    langIndicator.update(true);
+    refreshLiquidGlass(panelEl);
   }
 
   function toggle(anchorEl: HTMLElement): void {
@@ -450,6 +465,9 @@ export function createAppearancePopover(hostEl: HTMLElement = document.body): Ap
       }
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
+      styleIndicator.destroy();
+      langIndicator.destroy();
+      detachGlass();
       panelEl.remove();
     },
   };

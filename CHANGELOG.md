@@ -1,5 +1,20 @@
 # 更新日志 / Changelog
 
+## v0.3.5 (2026-11-22)
+
+### 新增功能与体验升级 / Features & Improvements
+- **接入 FlClash (`prism_ui`) 五层光学 Liquid Glass 滤镜系统**：
+  - **真光学玻璃渲染引擎**：新增 `src/services/liquidGlass.ts` 与 `src/styles/liquid-glass.css`，基于 Canvas 离屏倒角位移贴图与 SVG `feDisplacementMap` RGB 差异化位移实现真实的边缘棱镜色散（Dispersion）与物理倒角折射；
+  - **丰富光学预设**：内置 `regular`、`pill`、`menu`、`tinted` 与 `lens` 5 种预设剖面，并全面应用至顶部工具栏、抽屉、外观弹窗（AppearancePopover）、选区悬浮条（SelectionToolbar）、加载卡片、拖拽放置盒与轻提示（Toast）；
+  - **跟手交互辉光与开关降级**：实时跟踪指针位置注入 `--fc-gx` / `--fc-gy` 环境反光，并在外观设置面板集成实时开关（关闭时平滑退化为纯色浮层，零 GPU 额外开销），完美适配浅色、深色与 OLED 纯黑模式。
+- **分段控制器连续滑动物理胶囊（Segmented Indicator）**：
+  - 新增 `attachSegmentedIndicator` 辅助引擎（`src/utils/uiHelpers.ts`），为外观色彩风格与语言选择等分段控制器挂载物理滑动胶囊；
+  - 自动监听选项切换、DOM 树变动、多语言文本尺寸差异与 `document.fonts.ready`，首帧精准落位阻断从左上角飞入并平滑无缝滑移。
+- **物理动效与手感规范对齐**：
+  - **抽屉舞台退行**：打开工作区文件抽屉时主舞台（`.fp-shell-stage`）平滑下沉缩放（$0.985$）并附带景深微虚化；
+  - **触发源锚定展开**：外观设置面板基于点击锚点按钮的中心位置精准映射 `transform-origin` 弹性展开；
+  - **质感与细节打磨**：欢迎页引入 Hero Cookie-9 几何水印纹理，Toast 组件升级为平滑进出动效，并补充 `--fc-destructive` 语义色彩 Token。
+
 ## v0.3.4 (2026-11-21)
 
 ### 修复与优化 / Fixes & Improvements

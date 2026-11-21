@@ -1,3 +1,4 @@
+import { attachLiquidGlass, refreshLiquidGlass } from '../services/liquidGlass';
 import { copyTextToClipboard } from '../utils/clipboard';
 import { onLocaleChange, tr } from '../utils/i18n';
 import { createIcon } from '../utils/icons';
@@ -171,6 +172,7 @@ export function createSelectionToolbar(
 
   barEl.append(metaEl, copyBtn);
   hostEl.appendChild(barEl);
+  const detachBarGlass = attachLiquidGlass(barEl, 'regular');
 
   let destroyed = false;
   let isCopying = false;
@@ -461,6 +463,7 @@ export function createSelectionToolbar(
     barEl.style.left = `${Math.round(left)}px`;
     barEl.style.top = `${Math.round(top)}px`;
     barEl.style.visibility = '';
+    refreshLiquidGlass(barEl);
   };
 
   const scheduleRefresh = (): void => {
@@ -617,6 +620,7 @@ export function createSelectionToolbar(
       hostEl.removeEventListener('scroll', handleHostScroll, { capture: true });
       window.removeEventListener('resize', handleWindowResize);
 
+      detachBarGlass();
       barEl.remove();
       highlightLayerEl.remove();
     },

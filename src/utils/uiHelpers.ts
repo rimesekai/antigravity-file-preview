@@ -172,3 +172,137 @@ export function attachTablistKeyboard(tablistEl: HTMLElement): () => void {
     tablistEl.removeEventListener('keydown', onKeyDown);
   };
 }
+
+export interface SegmentedIndicatorController {
+  update: (instant?: boolean) => void;
+  destroy: () => void;
+}
+
+/**
+ * 为分段控制器挂载 FlClash 连续滑动物理胶囊（.fc-segmented__indicator），
+ * 自动跟踪选项切换、文案变化与容器尺寸调整，并避免隐藏态首次展开时从左上角飞入。
+ */
+export function attachSegmentedIndicator(container: HTMLElement): SegmentedIndicatorController {
+  let indicator = container.querySelector<HTMLElement>('.fc-segmented__indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.className = 'fc-segmented__indicator';
+    indicator.setAttribute('aria-hidden', 'true');
+    container.insertBefore(indicator, container.firstChild);
+  }
+
+  let rafId = 0;
+  let readyRafId = 0;
+  let hasMeasuredVisible = false;
+  let destroyed = false;
+
+  const measureAndApply = (instant = false) => {
+    if (destroyed || !indicator) return;
+    const activeBtn = container.querySelector<HTMLElement>(
+      '.fc-segmented__btn[aria-pressed="true"], .fc-segmented__btn[aria-selected="true"], .fp-seg-btn[aria-pressed="true"], .fp-seg-btn[aria-selected="true"]',
+    );
+
+    if (!activeBtn || container.offsetParent === null) {
+      indicator.style.opacity = '0';
+      hasMeasuredVisible = false;
+      delete indicator.dataset.ready;
+      return;
+    }
+
+    const left = activeBtn.offsetLeft;
+    const top = activeBtn.offsetTop;
+    const width = activeBtn.offsetWidth;
+    const height = activeBtn.offsetHeight;
+
+    if (width <= 0 || height <= 0) {
+      indicator.style.opacity = '0';
+      hasMeasuredVisible = false;
+      delete indicator.dataset.ready;
+      return;
+    }
+
+    const shouldSnap = instant || !hasMeasuredVisible;
+    if (shouldSnap) {
+      delete indicator.dataset.ready;
+    }
+
+    indicator.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    indicator.style.width = `${width}px`;
+    indicator.style.height = `${height}px`;
+    indicator.style.opacity = '1';
+
+    if (shouldSnap) {
+      hasMeasuredVisible = true;
+      if (readyRafId !== 0) {
+        cancelAnimationFrame(readyRafId);
+      }
+      // 在下一帧开启平滑滑移过渡，确保首次测量瞬间落位不飞入
+      readyRafId = requestAnimationFrame(() => {
+        readyRafId = 0;
+        if (!destroyed && indicator) {
+          indicator.dataset.ready = 'true';
+        }
+      });
+    }
+  };
+
+  const scheduleUpdate = (instant = false) => {
+    if (destroyed) return;
+    if (instant) {
+      if (rafId !== 0) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      measureAndApply(true);
+      return;
+    }
+    if (rafId !== 0) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      measureAndApply(false);
+    });
+  };
+
+  const mutationObserver = new MutationObserver(() => {
+    scheduleUpdate(false);
+  });
+  mutationObserver.observe(container, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['aria-pressed', 'aria-selected', 'hidden'],
+  });
+
+  const resizeObserver =
+    typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => {
+          scheduleUpdate(!hasMeasuredVisible);
+        })
+      : null;
+  resizeObserver?.observe(container);
+
+  if (typeof document !== 'undefined' && 'fonts' in document) {
+    void document.fonts.ready.then(() => {
+      if (!destroyed) scheduleUpdate(true);
+    });
+  }
+
+  scheduleUpdate(true);
+
+  return {
+    update(instant = false): void {
+      scheduleUpdate(instant);
+    },
+    destroy(): void {
+      if (destroyed) return;
+      destroyed = true;
+      if (rafId !== 0) cancelAnimationFrame(rafId);
+      if (readyRafId !== 0) cancelAnimationFrame(readyRafId);
+      mutationObserver.disconnect();
+      resizeObserver?.disconnect();
+      indicator?.remove();
+      indicator = null;
+    },
+  };
+}

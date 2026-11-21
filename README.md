@@ -8,7 +8,7 @@
       <img src="https://github.com/rimesekai/antigravity-file-preview/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
     </a>
     <a href="https://github.com/rimesekai/antigravity-file-preview/releases">
-      <img src="https://img.shields.io/badge/version-v0.3.2-2563eb.svg" alt="Version v0.3.2" />
+      <img src="https://img.shields.io/badge/version-v0.3.5-2563eb.svg" alt="Version v0.3.5" />
     </a>
     <a href="./LICENSE">
       <img src="https://img.shields.io/badge/License-MIT-16a34a.svg" alt="License: MIT" />
@@ -69,7 +69,7 @@
 - **PDF 预览（`.pdf`，含 >20MB 大文件流式预览）**：基于 `pdfjs-dist` 与本地独立端口 HTTP Range（`206 Partial Content`）分片流式加载服务，无需一次性将整份大文件读入内存即可按需渲染可视页面；支持单页 / 滚动布局、可折叠缩略图栏、适应 / 缩放、放大后空白处左键 / 任意位置中键拖拽平移视图（悬停透明文本层自动选字）、1-based 翻页跳页与跨页全文搜索。
 - **MP4 视频播放（`.mp4`，含 >20MB 大视频流式播放）**：基于本地独立端口 HTTP Range（`206 Partial Content`）按需分片流式播放（最高支持 4GB 本地 MP4），支持拖动进度条、0.5x–2x 倍速调节与循环播放。
 - **HTML 预览（`.html` / `.htm`）**：通过按需启动的本地独立端口静态预览服务（`127.0.0.1:0`）挂载渲染，完整支持同目录及工作区内相对路径资源（CSS / JS / 图片 / 字体），并与 Sidecar 主控台严格跨源隔离；支持安全沙箱、交互模式与源码视图切换。
-- **原地自动刷新、外观引擎与中英双语切换**：默认开启文件变更自动刷新（2.5s 检查 `mtimeMs` / `size`），同文件更新时原地重载并保留当前页码 / 工作表、缩放、滚动位置与搜索高亮；加载失败时保留真实格式徽标并在文件修复后自动轮询恢复；采用四层无边框表面层级与等宽数字排版，接入 `prism_ui` 物理动效规范（液滴弹性开关、按钮按压微缩回弹、列表行只叠加墨水不缩放、Top Layer 浮层/抽屉平滑进出与 `prefers-reduced-motion` 无障碍降级），自动同步跟随 Antigravity 浅色 / 深色主题，并在右上角「外观与主题」面板内集成「跟随宿主 / 浅色 / 深色」、自动配对（浅蓝 / 深琥珀）及 6 套强调色种子、4 种色彩风格、OLED 纯黑深色、Liquid Glass 浮层与「跟随系统 / 中文 / English」语言切换。
+- **原地自动刷新、外观引擎与中英双语切换**：默认开启文件变更自动刷新（2.5s 检查 `mtimeMs` / `size`），同文件更新时原地重载并保留当前页码 / 工作表、缩放、滚动位置与搜索高亮；加载失败时保留真实格式徽标并在文件修复后自动轮询恢复；采用四层无边框表面层级与等宽数字排版，接入 `flclash-ui`（`prism_ui`）五层光学 Liquid Glass 系统（Canvas 倒角折射位移贴图 + SVG `feDisplacementMap` RGB 边缘色散、上下定向镜面高光环、跟手高斯按压辉光，关闭开关时平滑回退纯色浮层）与物理动效规范（分段控制器连续滑动物理胶囊、抽屉展开底层退行缩放、触发源弹性展开、液滴弹性开关、按钮按压微缩回弹、列表行只叠加墨水不缩放、Hero Cookie-9 几何水印与 `prefers-reduced-motion` 无障碍降级），自动同步跟随 Antigravity 浅色 / 深色主题，并在右上角「外观与主题」面板内集成「跟随宿主 / 浅色 / 深色」、自动配对（浅蓝 / 深琥珀）及 6 套强调色种子、4 种色彩风格、OLED 纯黑深色、Liquid Glass 浮层与「跟随系统 / 中文 / English」语言切换。
 - **默认直接选字、空白处拖拽平移与选区提示**：预览区（PPT / Word / Excel / PDF / HTML 源码等）默认支持直接划选文字，无需任何模式切换按钮；在 PPT / PDF / Word 放大后，鼠标停留在文字上自动显示文本光标并放行左键划选，移动到空白处自动切换抓手光标拖动平移视图（中键在任意区域均可拖拽平移），同时增强文本与 PDF 透明文本层的 `::selection` 高对比高亮；选中文字后弹出悬浮选区提示条，实时显示已选字数并支持一键复制，复制后在原文选区位置绘制追踪高亮选框与状态提示胶囊。
 - **关联打开与工作区扫描**：支持通过点击工作区文件（`file_extensions`）、侧边栏文件列表、路径直达或拖拽文件快速切换预览对象。
 
