@@ -7,8 +7,8 @@
     <a href="https://github.com/rimesekai/antigravity-file-preview/actions/workflows/ci.yml">
       <img src="https://github.com/rimesekai/antigravity-file-preview/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
     </a>
-    <a href="https://github.com/rimesekai/antigravity-file-preview/releases">
-      <img src="https://img.shields.io/badge/version-v0.3.5-2563eb.svg" alt="Version v0.3.5" />
+    <a href="https://github.com/rimesekai/antigravity-file-preview/releases/latest">
+      <img src="https://img.shields.io/github/v/release/rimesekai/antigravity-file-preview?label=version&amp;color=2563eb" alt="Version" />
     </a>
     <a href="./LICENSE">
       <img src="https://img.shields.io/badge/License-MIT-16a34a.svg" alt="License: MIT" />
