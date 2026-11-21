@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v0.3.7 (2026-11-22)
+
+### 修复与优化 / Fixes & Improvements
+- **对齐 Word 原版倍行距渲染并修复大图与图注跨页拆散问题**：
+  - **倍行距基准系数校准（`normalizeDocxAutoLineHeight`）**：针对 `docx-preview` 将 `<w:spacing w:lineRule="auto"/>` 直接映射为 CSS 无单位 `line-height`（如 1.5 倍行距 `line="360"` 被设为 `1.50`）导致行高比 Word 原版偏矮的问题，统一将正文段落与样式表中的无单位 `line-height` 乘以 Word 单倍行框基准系数 `1.3`（`1.50` $\to$ `1.95`），同时保持纯图片段落与固定单位行距不被误拉高；
+  - **大图 `keepNext` 与图片-图注同页保护**：移除 `computeKeepNextGroupEnd` 中“超过半页高度跳过 `keepNext`”的限制，并补充“纯图片段落 + 紧邻短图注”的隐式同页粘连规则与末尾可切分长段落的最小两行预留高度计算，彻底解决插图超过半页时图片被强行留在上一页底而图注被拆到下一页的问题，使无预渲染分页符文档的分页位置与总页数高度对齐 Word 原版；
+  - **测试覆盖**：在 `tests/server.test.mjs` 新增倍行距校准与大图图注同页保护单元测试，全量 16 个套件共 53 项测试全部通过。
+
 ## v0.3.6 (2026-11-22)
 
 ### 修复与优化 / Fixes & Improvements

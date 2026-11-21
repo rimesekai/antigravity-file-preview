@@ -2894,8 +2894,20 @@ describe('docxPaginator Word 无预渲染分页符几何自动分页测试', () 
           ? this.attributes[name]
           : null;
       }
+      setAttribute(name, value) {
+        this.attributes[name] = String(value);
+      }
       removeAttribute(name) {
         delete this.attributes[name];
+      }
+      closest(selector) {
+        const parts = selector.split(',').map((s) => s.trim().toUpperCase());
+        let curr = this;
+        while (curr && curr.nodeType === 1) {
+          if (parts.includes(curr.tagName)) return curr;
+          curr = curr.parentNode;
+        }
+        return null;
       }
       appendChild(child) {
         if (child.parentNode) {
@@ -2952,7 +2964,7 @@ describe('docxPaginator Word 无预渲染分页符几何自动分页测试', () 
       }
       querySelectorAll(selector) {
         const res = [];
-        const matchSimple = (el, sel) => {
+        const matchSingle = (el, sel) => {
           if (sel === '[id]') return Object.prototype.hasOwnProperty.call(el.attributes, 'id');
           if (sel.startsWith('[class*="')) {
             const needle = sel.slice(9, -2);
@@ -2965,6 +2977,16 @@ describe('docxPaginator Word 无预渲染分页符几何自动分页测试', () 
             return el.tagName === sel.toUpperCase();
           }
           return false;
+        };
+        const matchSimple = (el, sel) => {
+          if (sel.includes(',')) {
+            return sel
+              .split(',')
+              .map((part) => part.trim())
+              .filter(Boolean)
+              .some((part) => matchSingle(el, part));
+          }
+          return matchSingle(el, sel);
         };
         if (selector === '.docx-wrapper > section.docx') {
           const walkWrap = (node) => {
@@ -3490,6 +3512,118 @@ describe('docxPaginator Word 无预渲染分页符几何自动分页测试', () 
     assert.equal(page2Rows[0].classList.contains(DOCX_TBL_HEADER_CLASS), true);
     assert.equal(page2Rows[1].children[0].rowSpan, 2);
     assert.equal(page2Rows[2].children[0].style.display, 'none');
+  });
+
+  it('normalizeDocxAutoLineHeight 修正 1.5 倍无单位行距为 1.95，同时保留图片段落与固定单位行高', async () => {
+    const { normalizeDocxAutoLineHeight } = await import('../src/utils/docxPaginator.ts');
+    const { MockElement, MockText } = createMockDomEnv();
+
+    const stage = new MockElement('div');
+    const styleEl = new MockElement('style');
+    styleEl.appendChild(
+      new MockText('.docx p { line-height: 1.15; } .fixed { line-height: 18pt; }'),
+    );
+
+    const bodyPara = new MockElement('p', { style: { lineHeight: '1.50' } });
+    bodyPara.appendChild(new MockText('正文段落文本'));
+
+    const fixedPara = new MockElement('p', { style: { lineHeight: '20pt' } });
+    fixedPara.appendChild(new MockText('固定行距文本'));
+
+    const imgPara = new MockElement('p', { style: { lineHeight: '1.00' } });
+    imgPara.appendChild(new MockElement('img'));
+
+    const imgNoLhPara = new MockElement('p');
+    imgNoLhPara.appendChild(new MockElement('img'));
+
+    const footer = new MockElement('footer');
+    const footerPara = new MockElement('p', { style: { lineHeight: '1.00' } });
+    footerPara.appendChild(new MockText('1'));
+    footer.appendChild(footerPara);
+
+    stage.appendChild(styleEl);
+    stage.appendChild(bodyPara);
+    stage.appendChild(fixedPara);
+    stage.appendChild(imgPara);
+    stage.appendChild(imgNoLhPara);
+    stage.appendChild(footer);
+
+    normalizeDocxAutoLineHeight(stage);
+    // 幂等性二次调用不应重复放大
+    normalizeDocxAutoLineHeight(stage);
+
+    assert.equal(bodyPara.style.lineHeight, '1.95');
+    assert.equal(fixedPara.style.lineHeight, '20pt');
+    assert.equal(imgPara.style.lineHeight, '1.00');
+    assert.equal(imgNoLhPara.style.lineHeight, '1.2');
+    assert.equal(footerPara.style.lineHeight, '1.00');
+    assert.match(styleEl.textContent, /line-height:\s*1\.495;/);
+    assert.match(styleEl.textContent, /line-height:\s*18pt;/);
+  });
+
+  it('超过半页的 keepNext 大图及无 keepNext 纯图+短图注均整组推入下一页，不把图注拆散到下一页', async () => {
+    const {
+      DOCX_KEEP_NEXT_CLASS,
+      paginateOverflowDocxSections,
+    } = await import('../src/utils/docxPaginator.ts');
+    const { MockElement, MockText } = createMockDomEnv();
+
+    const stage = new MockElement('div');
+    const wrapper = new MockElement('div', { className: 'docx-wrapper' });
+    const section = new MockElement('section', {
+      className: 'docx',
+      height: 2200,
+      style: { minHeight: '1120px' },
+    });
+    const article = new MockElement('article');
+
+    // 第一页：图1(326px) + 图注1(48px) = 374px，剩余 546px
+    // 紧接图2(504px > 920*0.5=460px，占 54.8% 页高！) + 图注2(48px) = 552px > 546px
+    // 由于 504px 能放进剩余 546px，若错误跳过 >50% 的 keepNext，图2 会硬塞在页1而图注2被拆到页2
+    const img1 = new MockElement('p', { className: DOCX_KEEP_NEXT_CLASS, height: 326 });
+    img1.appendChild(new MockElement('img', { height: 326 }));
+    const cap1 = new MockElement('p', { height: 48 });
+    cap1.appendChild(new MockText('图1 说明'));
+
+    const img2 = new MockElement('p', { className: DOCX_KEEP_NEXT_CLASS, height: 504 });
+    img2.appendChild(new MockElement('img', { height: 504 }));
+    const cap2 = new MockElement('p', { height: 48 });
+    cap2.appendChild(new MockText('图2 说明'));
+
+    // 第三张图故意不带 keepNext 类，验证纯图片+短图注隐式粘连保护（页2剩余 920-552=368px；若换成高330+图注48=378px > 368px）
+    const img3 = new MockElement('p', { height: 330 });
+    img3.appendChild(new MockElement('img', { height: 330 }));
+    const cap3 = new MockElement('p', { height: 48 });
+    cap3.appendChild(new MockText('图3 说明'));
+
+    for (const el of [img1, cap1, img2, cap2, img3, cap3]) {
+      article.appendChild(el);
+    }
+    section.appendChild(article);
+    wrapper.appendChild(section);
+    stage.appendChild(wrapper);
+
+    await paginateOverflowDocxSections(
+      stage,
+      { hasLastRenderedPageBreak: false, evenAndOddHeaders: false, sectionMetas: [{ sectProps: {} }] },
+      {
+        measurer: {
+          getSectionMinHeightPx: () => 1120,
+          getSectionHeightPx: (sec) => sec.offsetHeight,
+          getMaxArticleHeightPx: () => 920,
+          getArticleColumnCount: () => 1,
+          measureBlock: (el) => ({ height: el._mockHeight, marginTop: 0, marginBottom: 0 }),
+          splitParagraph: () => null,
+          splitTable: () => null,
+        },
+      },
+    );
+
+    const pages = stage.querySelectorAll('.docx-wrapper > section.docx');
+    assert.equal(pages.length, 3);
+    assert.deepEqual(pages[0].children[0].children, [img1, cap1]);
+    assert.deepEqual(pages[1].children[0].children, [img2, cap2]);
+    assert.deepEqual(pages[2].children[0].children, [img3, cap3]);
   });
 });
 

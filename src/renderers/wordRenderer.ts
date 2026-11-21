@@ -17,6 +17,7 @@ import {
 } from '../utils/docxPageFields';
 import {
   collectDocxPaginationMeta,
+  normalizeDocxAutoLineHeight,
   paginateOverflowDocxSections,
   waitForDocxMediaReady,
   type DocxHeaderFooterTemplates,
@@ -623,6 +624,7 @@ export function createWordRenderer(): PreviewRenderer {
       }
 
       applyDocxCjkLayout(stageEl, cjkLayoutContext);
+      normalizeDocxAutoLineHeight(stageEl);
       normalizeDocxMathMl(stageEl);
       await waitForDocxMediaReady(stageEl);
       if (destroyed || gen !== loadGeneration) {

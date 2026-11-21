@@ -6,6 +6,7 @@ export const DOCX_TBL_HEADER_CLASS = 'fp-docx-tbl-header';
 export const DOCX_CONTINUED_PARA_CLASS = 'fp-docx-continued-para';
 
 const DEFAULT_PT_TO_PX = 96 / 72;
+const WORD_AUTO_LINE_HEIGHT_RATIO = 1.3;
 const SECTION_OVERFLOW_TOLERANCE_PX = 6;
 const RENDERED_BREAK_OVERFLOW_RATIO = 1.28;
 const FIT_TOLERANCE_PX = 1;
@@ -13,6 +14,10 @@ const MIN_SPLIT_HEIGHT_PX = 36;
 const MAX_KEEP_NEXT_GROUP_SIZE = 3;
 const MEDIA_READY_TIMEOUT_MS = 1500;
 const INDIVISIBLE_SELECTOR = 'img, svg, canvas, table, video, audio, iframe, object, embed';
+const MEDIA_ONLY_SELECTOR = 'img, svg, canvas';
+const UNITLESS_LINE_HEIGHT_VALUE_RE = /^\d+(?:\.\d+)?$/;
+const STYLE_UNITLESS_LINE_HEIGHT_RE = /(line-height\s*:\s*)(\d+(?:\.\d+)?)(\s*(?:;|(?=\})))/gi;
+const LINE_HEIGHT_NORMALIZED_ATTR = 'data-fp-lh-normalized';
 
 export interface DocxPaginationSectionMeta {
   sectProps: any;
@@ -196,6 +201,92 @@ export function collectDocxPaginationMeta(doc: any): DocxPaginationMeta {
     evenAndOddHeaders,
     sectionMetas,
   };
+}
+
+function hasMediaDescendant(el: HTMLElement): boolean {
+  if (typeof el.querySelector === 'function') {
+    return Boolean(el.querySelector(MEDIA_ONLY_SELECTOR));
+  }
+  return false;
+}
+
+function hasIndivisibleDescendant(el: HTMLElement): boolean {
+  if (typeof el.querySelector === 'function') {
+    return Boolean(el.querySelector(INDIVISIBLE_SELECTOR));
+  }
+  return false;
+}
+
+function isImageOnlyParagraph(el: HTMLElement): boolean {
+  if (el.tagName?.toUpperCase() !== 'P') return false;
+  if (!hasMediaDescendant(el)) return false;
+  const text = (el.textContent ?? '').replace(/[\s\u00a0\u200B\uFEFF]/g, '');
+  return text.length === 0;
+}
+
+function isShortCaptionLikeParagraph(
+  el: HTMLElement,
+  metric: BlockBoxMetrics,
+  maxArticleHeightPx: number,
+): boolean {
+  if (el.tagName?.toUpperCase() !== 'P') return false;
+  if (hasIndivisibleDescendant(el)) return false;
+  return metric.height <= Math.min(120, maxArticleHeightPx * 0.18);
+}
+
+/**
+ * 修正 docx-preview 将 Word <w:spacing w:lineRule="auto"/> 直接映射为 CSS 无单位 line-height 造成的行高偏矮问题：
+ * Word 中单倍行距 (240) 约为字号的 1.3 倍自然行框高度，而在 CSS 中无单位 line-height 直接乘以 font-size。
+ * 本函数将 <style> 规则与正文段落上的纯数字无单位 line-height 统一乘以 1.3（跳过纯图片段落与已处理节点）。
+ */
+export function normalizeDocxAutoLineHeight(stageEl: HTMLElement): void {
+  if (typeof stageEl?.querySelectorAll !== 'function') return;
+
+  const styles = Array.from(stageEl.querySelectorAll<HTMLElement>('style'));
+  for (const styleEl of styles) {
+    if (styleEl.getAttribute?.(LINE_HEIGHT_NORMALIZED_ATTR) === '1') continue;
+    const cssText = styleEl.textContent ?? '';
+    if (cssText) {
+      const updated = cssText.replace(
+        STYLE_UNITLESS_LINE_HEIGHT_RE,
+        (full, prefix: string, numStr: string, suffix: string) => {
+          const val = Number.parseFloat(numStr);
+          if (!Number.isFinite(val) || val <= 0) return full;
+          return `${prefix}${Number((val * WORD_AUTO_LINE_HEIGHT_RATIO).toFixed(3))}${suffix}`;
+        },
+      );
+      if (updated !== cssText) {
+        styleEl.textContent = updated;
+      }
+    }
+    styleEl.setAttribute?.(LINE_HEIGHT_NORMALIZED_ATTR, '1');
+  }
+
+  const paragraphs = Array.from(stageEl.querySelectorAll<HTMLElement>('p'));
+  for (const p of paragraphs) {
+    if (p.getAttribute?.(LINE_HEIGHT_NORMALIZED_ATTR) === '1') continue;
+    if (typeof p.closest === 'function' && p.closest('header, footer')) {
+      p.setAttribute?.(LINE_HEIGHT_NORMALIZED_ATTR, '1');
+      continue;
+    }
+
+    const rawLineHeight = p.style?.lineHeight?.trim() ?? '';
+    if (isImageOnlyParagraph(p)) {
+      if (!rawLineHeight) {
+        p.style.lineHeight = '1.2';
+      }
+      p.setAttribute?.(LINE_HEIGHT_NORMALIZED_ATTR, '1');
+      continue;
+    }
+
+    if (UNITLESS_LINE_HEIGHT_VALUE_RE.test(rawLineHeight)) {
+      const val = Number.parseFloat(rawLineHeight);
+      if (Number.isFinite(val) && val > 0) {
+        p.style.lineHeight = `${Number((val * WORD_AUTO_LINE_HEIGHT_RATIO).toFixed(3))}`;
+      }
+    }
+    p.setAttribute?.(LINE_HEIGHT_NORMALIZED_ATTR, '1');
+  }
 }
 
 /**
@@ -656,7 +747,7 @@ function createDefaultDomMeasurer(): DocxPaginationMeasurer {
         return null;
       }
       if (hasClass(para, DOCX_KEEP_LINES_CLASS)) return null;
-      if (typeof para.querySelector === 'function' && para.querySelector(INDIVISIBLE_SELECTOR)) {
+      if (hasIndivisibleDescendant(para)) {
         return null;
       }
 
@@ -838,6 +929,13 @@ interface SectionPagePlan {
   articles: ArticlePagePlan[];
 }
 
+function isSplittableLongTextParagraph(el: HTMLElement, metric: BlockBoxMetrics): boolean {
+  if (el.tagName?.toUpperCase() !== 'P') return false;
+  if (hasClass(el, DOCX_KEEP_LINES_CLASS)) return false;
+  if (hasIndivisibleDescendant(el)) return false;
+  return metric.height > MIN_SPLIT_HEIGHT_PX * 2;
+}
+
 function measureGroupHeight(
   queue: HTMLElement[],
   metrics: BlockBoxMetrics[],
@@ -853,7 +951,11 @@ function measureGroupHeight(
     const gap = i === startIdx && initialUsedEnd === 0 && initialLastMarginBottom === 0
       ? m.marginTop
       : collapseMargins(lastMb, m.marginTop);
-    usedEnd += gap + m.height;
+    const effectiveHeight =
+      i === endIdx && isSplittableLongTextParagraph(queue[i], m)
+        ? Math.min(m.height, Math.max(MIN_SPLIT_HEIGHT_PX, 64))
+        : m.height;
+    usedEnd += gap + effectiveHeight;
     lastMb = m.marginBottom;
   }
   return usedEnd;
@@ -866,21 +968,34 @@ function computeKeepNextGroupEnd(
   maxArticleHeightPx: number,
 ): number {
   const first = queue[idx];
-  if (
-    first.tagName?.toUpperCase() !== 'P' ||
-    !hasClass(first, DOCX_KEEP_NEXT_CLASS) ||
-    metrics[idx].height > maxArticleHeightPx * 0.5
-  ) {
+  if (first.tagName?.toUpperCase() !== 'P') {
+    return idx;
+  }
+
+  const hasExplicitKeepNext = hasClass(first, DOCX_KEEP_NEXT_CLASS);
+  const hasImplicitImageCaptionKeep =
+    idx + 1 < queue.length &&
+    isImageOnlyParagraph(first) &&
+    isShortCaptionLikeParagraph(queue[idx + 1], metrics[idx + 1], maxArticleHeightPx);
+
+  if (!hasExplicitKeepNext && !hasImplicitImageCaptionKeep) {
     return idx;
   }
 
   let endIdx = idx;
   while (
     endIdx + 1 < queue.length &&
-    endIdx - idx + 1 < MAX_KEEP_NEXT_GROUP_SIZE &&
-    queue[endIdx].tagName?.toUpperCase() === 'P' &&
-    hasClass(queue[endIdx], DOCX_KEEP_NEXT_CLASS)
+    endIdx - idx + 1 < MAX_KEEP_NEXT_GROUP_SIZE
   ) {
+    const curr = queue[endIdx];
+    const currExplicit =
+      curr.tagName?.toUpperCase() === 'P' && hasClass(curr, DOCX_KEEP_NEXT_CLASS);
+    const currImplicitImgCap =
+      isImageOnlyParagraph(curr) &&
+      isShortCaptionLikeParagraph(queue[endIdx + 1], metrics[endIdx + 1], maxArticleHeightPx);
+    if (!currExplicit && !currImplicitImgCap) {
+      break;
+    }
     endIdx += 1;
   }
   return endIdx;
