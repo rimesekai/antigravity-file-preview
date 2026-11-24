@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve, win32 } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SidecarApp, Response } from 'sidecar_sdk';
-import { closeHtmlServer, mountHtmlTarget, mountPdfTarget, mountVideoTarget } from './htmlServer.mjs';
+import { closeHtmlServer, mountHtmlTarget, mountImageTarget, mountPdfTarget, mountVideoTarget } from './htmlServer.mjs';
 import { HttpError, validateFilePath } from './pathSecurity.mjs';
 import { scanWorkspaceFiles } from './workspaceScanner.mjs';
 
@@ -37,6 +37,7 @@ const MAX_PARSED_READ_BYTES = 60 * 1024 * 1024; // 60 MB：Excel/PPT/Word 等需
 const MAX_TEXT_READ_BYTES = 80 * 1024 * 1024; // 80 MB：其余由 /api/fs/read 直接读取的文件上限
 const MAX_PDF_BYTES = 1024 * 1024 * 1024; // 1 GB PDF 流式预览安全上限
 const MAX_VIDEO_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB MP4 流式播放安全上限
+const MAX_IMAGE_BYTES = 256 * 1024 * 1024; // 256 MB 图片预览安全上限
 
 // 按文件路径缓存静态资源内容，并以 stat.mtimeMs + size 判定失效，兼顾高并发读取性能与开发热构建刷新
 const staticFileCache = new Map();
@@ -201,6 +202,7 @@ export function registerRoutes(app, options = {}) {
   const mountHtml = options.mountHtml || mountHtmlTarget;
   const mountPdf = options.mountPdf || mountPdfTarget;
   const mountVideo = options.mountVideo || mountVideoTarget;
+  const mountImage = options.mountImage || mountImageTarget;
   const revealFile = options.revealFile || revealFileInExplorer;
   const allowedRootsOverride = options.allowedRootsOverride || null;
 
@@ -375,6 +377,34 @@ export function registerRoutes(app, options = {}) {
       }
 
       const mounted = await mountVideo(info.path);
+      return {
+        url: mounted.url,
+        mountId: mounted.mountId,
+        fileName: info.name,
+        size: info.size,
+      };
+    }, ResponseClass),
+    'POST',
+  );
+
+  // 挂载图片文件（.jpg / .jpeg / .png）到独立端口静态预览服务
+  app.api(
+    '/api/image/mount',
+    withErrorHandling(async (data) => {
+      const info = validateFilePath(data.file, {
+        workspaceUris: data.workspaceUris,
+        allowedRootsOverride,
+      });
+
+      if (info.kind !== 'image') {
+        throw new HttpError(415, '仅支持将 .jpg、.jpeg 或 .png 图片挂载到预览服务', 'NOT_IMAGE_FILE');
+      }
+
+      if (info.size > MAX_IMAGE_BYTES) {
+        throw new HttpError(413, '图片文件体积超过 256MB 预览上限', 'FILE_TOO_LARGE');
+      }
+
+      const mounted = await mountImage(info.path);
       return {
         url: mounted.url,
         mountId: mounted.mountId,

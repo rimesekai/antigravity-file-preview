@@ -186,7 +186,7 @@ export function translateApiErrorMessage(
     case 'UNSUPPORTED_LEGACY_DOC':
       return 'Legacy binary .doc format is not supported. Please save it as .docx in Word or WPS first.';
     case 'UNSUPPORTED_FORMAT':
-      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .html, and .htm are supported.';
+      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm are supported.';
     case 'INVALID_PATH':
       return 'Invalid file path parameter; expected a string.';
     case 'NULL_BYTE_PATH':
@@ -213,6 +213,8 @@ export function translateApiErrorMessage(
       return 'Only .pdf files can be mounted to the PDF streaming server.';
     case 'NOT_VIDEO_FILE':
       return 'Only .mp4 files can be mounted to the video streaming server.';
+    case 'NOT_IMAGE_FILE':
+      return 'Only .jpg, .jpeg, or .png image files can be mounted to the image preview server.';
     case 'FILE_TOO_LARGE':
       return 'File size exceeds the safety limit for direct preview.';
     default:
@@ -236,7 +238,7 @@ export function translateApiErrorMessage(
     case 413:
       return 'File size exceeds the in-memory preview limit (60MB for parsed documents).';
     case 415:
-      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .html, and .htm are supported.';
+      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm are supported.';
     default:
       return status >= 500
         ? `Preview service internal error (HTTP ${status}). Please try again later.`

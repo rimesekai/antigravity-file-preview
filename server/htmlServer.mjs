@@ -34,9 +34,10 @@ export const MIME_TYPES = Object.freeze({
 /** @type {Map<string, { mountRoot: string, entryRelPath: string, createdAt: number }>} */
 const mounts = new Map();
 
-/** @type {Map<string, { filePath: string, fileName: string, size: number, createdAt: number }>} */
+/** @type {Map<string, { filePath: string, fileName: string, size: number, contentType?: string, createdAt: number }>} */
 const pdfMounts = new Map();
 const videoMounts = new Map();
+const imageMounts = new Map();
 
 const PDF_CORS_HEADERS = Object.freeze({
   'Access-Control-Allow-Origin': '*',
@@ -185,7 +186,7 @@ function handleRangeMountRequest(req, res, rawPathname, mountMap, routePrefix, c
   const baseHeaders = {
     ...PDF_CORS_HEADERS,
     'Accept-Ranges': 'bytes',
-    'Content-Type': contentType,
+    'Content-Type': mount.contentType || contentType,
     'Content-Disposition': 'inline',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store',
@@ -296,6 +297,11 @@ function handlePreviewRequest(req, res) {
 
   if (rawPathname.startsWith('/v/')) {
     handleRangeMountRequest(req, res, rawPathname, videoMounts, 'v', 'video/mp4');
+    return;
+  }
+
+  if (rawPathname.startsWith('/i/')) {
+    handleRangeMountRequest(req, res, rawPathname, imageMounts, 'i', 'application/octet-stream');
     return;
   }
 
@@ -490,7 +496,7 @@ export async function mountHtmlTarget(resolvedFilePath, allowedWorkspaceRoots = 
 
 async function mountRangeTarget(
   resolvedFilePath,
-  expectedExt,
+  expectedExts,
   routePrefix,
   mountMap,
   invalidCode,
@@ -501,8 +507,9 @@ async function mountRangeTarget(
     throw new HttpError(403, '禁止访问受保护的系统生成日志或消息目录', 'FORBIDDEN_SYSTEM_PATH');
   }
 
+  const allowedExts = Array.isArray(expectedExts) ? expectedExts : [expectedExts];
   const ext = extname(realFilePath).toLowerCase();
-  if (ext !== expectedExt) {
+  if (!allowedExts.includes(ext)) {
     throw new HttpError(415, invalidMessage, invalidCode);
   }
 
@@ -514,11 +521,13 @@ async function mountRangeTarget(
   const port = await ensureHtmlServerStarted();
   const mountId = randomBytes(24).toString('hex');
   const fileName = basename(realFilePath);
+  const contentType = MIME_TYPES[ext] || undefined;
 
   mountMap.set(mountId, {
     filePath: realFilePath,
     fileName,
     size: stat.size,
+    contentType,
     createdAt: Date.now(),
   });
 
@@ -570,6 +579,22 @@ export async function mountVideoTarget(resolvedFilePath) {
 }
 
 /**
+ * 将合法的本地 .jpg / .jpeg / .png 图片文件注册为独立端口静态预览挂载点。
+ * @param {string} resolvedFilePath 已通过安全校验的真实文件路径
+ * @returns {Promise<{ url: string, mountId: string, fileName: string, size: number }>}
+ */
+export async function mountImageTarget(resolvedFilePath) {
+  return mountRangeTarget(
+    resolvedFilePath,
+    ['.jpg', '.jpeg', '.png'],
+    'i',
+    imageMounts,
+    'INVALID_IMAGE_TARGET',
+    '仅支持挂载 .jpg、.jpeg 或 .png 图片文件',
+  );
+}
+
+/**
  * 获取当前活跃挂载数量（供测试与监控使用）。
  * @returns {number}
  */
@@ -594,13 +619,22 @@ export function getActiveVideoMountCount() {
 }
 
 /**
- * 关闭独立 HTML/PDF/MP4 静态预览服务并清理所有挂载点。
+ * 获取当前活跃图片挂载数量（供测试与监控使用）。
+ * @returns {number}
+ */
+export function getActiveImageMountCount() {
+  return imageMounts.size;
+}
+
+/**
+ * 关闭独立 HTML/PDF/MP4/Image 静态预览服务并清理所有挂载点。
  * @returns {Promise<void>}
  */
 export async function closeHtmlServer() {
   mounts.clear();
   pdfMounts.clear();
   videoMounts.clear();
+  imageMounts.clear();
   listeningPromise = null;
   serverPort = 0;
 

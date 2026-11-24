@@ -1,5 +1,6 @@
 import type {
   HtmlPreviewMode,
+  ImageBackgroundMode,
   PptLayoutMode,
   PreviewKind,
   PreviewStateInfo,
@@ -60,6 +61,8 @@ export interface ToolbarCallbacks {
   onNextMatch: () => void;
   onPrevMatch: () => void;
   onHtmlModeChange: (mode: HtmlPreviewMode) => void;
+  onRotateImage?: (deltaDeg: number) => void;
+  onImageBgChange?: (mode: ImageBackgroundMode) => void;
 }
 
 export interface ToolbarController {
@@ -69,20 +72,27 @@ export interface ToolbarController {
 }
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0];
+const IMAGE_ZOOM_STEPS = [0.1, 0.25, 0.5, 0.67, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0];
 
-function clampZoom(value: number): number {
-  return Math.min(2.0, Math.max(0.5, Math.round(value * 100) / 100));
+function clampZoom(value: number, min = 0.5, max = 2.0): number {
+  return Math.min(max, Math.max(min, Math.round(value * 100) / 100));
 }
 
-function stepZoom(current: number, direction: -1 | 1): number {
-  const normalized = clampZoom(current || 1.0);
+function stepZoom(
+  current: number,
+  direction: -1 | 1,
+  min = 0.5,
+  max = 2.0,
+  steps = ZOOM_STEPS,
+): number {
+  const normalized = clampZoom(current || 1.0, min, max);
   if (direction > 0) {
-    const next = ZOOM_STEPS.find((step) => step > normalized + 0.02);
-    return next ?? clampZoom(normalized + 0.15);
+    const next = steps.find((step) => step > normalized + 0.02);
+    return next ?? clampZoom(normalized + 0.15, min, max);
   }
-  const reversed = [...ZOOM_STEPS].reverse();
+  const reversed = [...steps].reverse();
   const prev = reversed.find((step) => step < normalized - 0.02);
-  return prev ?? clampZoom(normalized - 0.15);
+  return prev ?? clampZoom(normalized - 0.15, min, max);
 }
 
 /**
@@ -574,7 +584,108 @@ export function createToolbar(
 
   htmlGroup.append(htmlModeSeg, htmlStatusBanner);
 
-  secondaryRow.append(pptGroup, wordGroup, htmlGroup);
+  // --- 图片工具条 ---
+  const imageGroup = document.createElement('div');
+  imageGroup.className = 'fp-format-controls fp-format-image';
+  imageGroup.hidden = true;
+
+  const imageZoomCluster = document.createElement('div');
+  imageZoomCluster.className = 'fp-cluster fp-cluster--pill';
+  imageZoomCluster.setAttribute('role', 'group');
+
+  const imageFitBtn = document.createElement('button');
+  imageFitBtn.type = 'button';
+  imageFitBtn.className = 'fp-btn fp-btn-chip';
+  imageFitBtn.setAttribute('aria-pressed', 'true');
+  imageFitBtn.appendChild(createIcon('fit', 13));
+  const imageFitText = document.createElement('span');
+  imageFitBtn.appendChild(imageFitText);
+  imageFitBtn.addEventListener('click', () => callbacks.onZoomChange('fit'));
+
+  const imageActualBtn = document.createElement('button');
+  imageActualBtn.type = 'button';
+  imageActualBtn.className = 'fp-btn fp-btn-chip fc-tabular';
+  imageActualBtn.setAttribute('aria-pressed', 'false');
+  imageActualBtn.textContent = '1:1';
+  imageActualBtn.addEventListener('click', () => callbacks.onZoomChange(1.0));
+
+  const imageZoomOutBtn = document.createElement('button');
+  imageZoomOutBtn.type = 'button';
+  imageZoomOutBtn.className = 'fp-btn fp-btn-icon fp-btn-icon--sm';
+  imageZoomOutBtn.appendChild(createIcon('minus', 13));
+  imageZoomOutBtn.addEventListener('click', () => {
+    if (imageZoomOutBtn.getAttribute('aria-disabled') === 'true') return;
+    const current = latestState.preview?.zoom ?? 1.0;
+    callbacks.onZoomChange(stepZoom(current, -1, 0.1, 8.0, IMAGE_ZOOM_STEPS));
+  });
+
+  const imageZoomText = document.createElement('span');
+  imageZoomText.className = 'fp-zoom-value fc-tabular';
+  imageZoomText.textContent = '100%';
+
+  const imageZoomInBtn = document.createElement('button');
+  imageZoomInBtn.type = 'button';
+  imageZoomInBtn.className = 'fp-btn fp-btn-icon fp-btn-icon--sm';
+  imageZoomInBtn.appendChild(createIcon('plus', 13));
+  imageZoomInBtn.addEventListener('click', () => {
+    if (imageZoomInBtn.getAttribute('aria-disabled') === 'true') return;
+    const current = latestState.preview?.zoom ?? 1.0;
+    callbacks.onZoomChange(stepZoom(current, 1, 0.1, 8.0, IMAGE_ZOOM_STEPS));
+  });
+
+  imageZoomCluster.append(imageFitBtn, imageActualBtn, imageZoomOutBtn, imageZoomText, imageZoomInBtn);
+
+  const imageRotateCluster = document.createElement('div');
+  imageRotateCluster.className = 'fp-cluster fp-cluster--pill';
+  imageRotateCluster.setAttribute('role', 'group');
+
+  const imageRotateLeftBtn = document.createElement('button');
+  imageRotateLeftBtn.type = 'button';
+  imageRotateLeftBtn.className = 'fp-btn fp-btn-icon fp-btn-icon--sm';
+  imageRotateLeftBtn.appendChild(createIcon('rotateLeft', 13));
+  imageRotateLeftBtn.addEventListener('click', () => callbacks.onRotateImage?.(-90));
+
+  const imageRotateRightBtn = document.createElement('button');
+  imageRotateRightBtn.type = 'button';
+  imageRotateRightBtn.className = 'fp-btn fp-btn-icon fp-btn-icon--sm';
+  imageRotateRightBtn.appendChild(createIcon('rotateRight', 13));
+  imageRotateRightBtn.addEventListener('click', () => callbacks.onRotateImage?.(90));
+
+  imageRotateCluster.append(imageRotateLeftBtn, imageRotateRightBtn);
+
+  const imageBgSeg = document.createElement('div');
+  imageBgSeg.className = 'fp-segmented';
+  imageBgSeg.setAttribute('role', 'group');
+
+  const imageBgCheckerBtn = document.createElement('button');
+  imageBgCheckerBtn.type = 'button';
+  imageBgCheckerBtn.className = 'fp-seg-btn';
+  imageBgCheckerBtn.setAttribute('aria-pressed', 'true');
+  const imageBgCheckerText = document.createElement('span');
+  imageBgCheckerBtn.appendChild(imageBgCheckerText);
+  imageBgCheckerBtn.addEventListener('click', () => callbacks.onImageBgChange?.('checker'));
+
+  const imageBgLightBtn = document.createElement('button');
+  imageBgLightBtn.type = 'button';
+  imageBgLightBtn.className = 'fp-seg-btn';
+  imageBgLightBtn.setAttribute('aria-pressed', 'false');
+  const imageBgLightText = document.createElement('span');
+  imageBgLightBtn.appendChild(imageBgLightText);
+  imageBgLightBtn.addEventListener('click', () => callbacks.onImageBgChange?.('light'));
+
+  const imageBgDarkBtn = document.createElement('button');
+  imageBgDarkBtn.type = 'button';
+  imageBgDarkBtn.className = 'fp-seg-btn';
+  imageBgDarkBtn.setAttribute('aria-pressed', 'false');
+  const imageBgDarkText = document.createElement('span');
+  imageBgDarkBtn.appendChild(imageBgDarkText);
+  imageBgDarkBtn.addEventListener('click', () => callbacks.onImageBgChange?.('dark'));
+
+  imageBgSeg.append(imageBgCheckerBtn, imageBgLightBtn, imageBgDarkBtn);
+
+  imageGroup.append(imageZoomCluster, imageRotateCluster, imageBgSeg);
+
+  secondaryRow.append(pptGroup, wordGroup, htmlGroup, imageGroup);
   root.append(primaryRow, secondaryRow);
   container.appendChild(root);
 
@@ -582,6 +693,7 @@ export function createToolbar(
   const stopSecondaryRoving = attachToolbarRovingFocus(secondaryRow);
   const pptLayoutIndicator = attachSegmentedIndicator(pptLayoutSeg);
   const htmlModeIndicator = attachSegmentedIndicator(htmlModeSeg);
+  const imageBgIndicator = attachSegmentedIndicator(imageBgSeg);
 
   function setButtonAriaDisabled(btn: HTMLButtonElement, disabled: boolean): void {
     btn.setAttribute('aria-disabled', String(disabled));
@@ -711,6 +823,25 @@ export function createToolbar(
     }
   }
 
+  function updateImageControls(preview: PreviewStateInfo | null): void {
+    const fitMode = preview?.fitMode ?? true;
+    const zoom = preview?.zoom ?? 1.0;
+    const isActual = !fitMode && Math.abs(zoom - 1.0) < 0.015;
+    const bgMode: ImageBackgroundMode = preview?.imageBg ?? 'checker';
+
+    imageFitBtn.setAttribute('aria-pressed', String(fitMode));
+    imageFitBtn.classList.toggle('is-active', fitMode);
+    imageActualBtn.setAttribute('aria-pressed', String(isActual));
+    imageActualBtn.classList.toggle('is-active', isActual);
+    imageZoomText.textContent = `${Math.round(zoom * 100)}%`;
+    setButtonAriaDisabled(imageZoomOutBtn, zoom <= 0.1);
+    setButtonAriaDisabled(imageZoomInBtn, zoom >= 8.0);
+
+    imageBgCheckerBtn.setAttribute('aria-pressed', String(bgMode === 'checker'));
+    imageBgLightBtn.setAttribute('aria-pressed', String(bgMode === 'light'));
+    imageBgDarkBtn.setAttribute('aria-pressed', String(bgMode === 'dark'));
+  }
+
   function applyStaticLocaleText(): void {
     primaryRow.setAttribute('aria-label', tr('主文档工具栏', 'Document toolbar'));
     secondaryRow.setAttribute('aria-label', tr('视图与格式控制', 'View and format controls'));
@@ -721,6 +852,9 @@ export function createToolbar(
     pptZoomCluster.setAttribute('aria-label', tr('缩放控制', 'Zoom controls'));
     wordZoomCluster.setAttribute('aria-label', tr('缩放控制', 'Zoom controls'));
     htmlModeSeg.setAttribute('aria-label', tr('HTML 预览模式', 'HTML preview mode'));
+    imageZoomCluster.setAttribute('aria-label', tr('图片缩放控制', 'Image zoom controls'));
+    imageRotateCluster.setAttribute('aria-label', tr('图片旋转控制', 'Image rotation controls'));
+    imageBgSeg.setAttribute('aria-label', tr('透明画布背景', 'Image canvas backdrop'));
 
     const filesTitle = tr('打开或切换工作区文件列表', 'Toggle workspace file list');
     drawerBtn.title = filesTitle;
@@ -773,6 +907,25 @@ export function createToolbar(
     htmlSandboxText.textContent = tr('沙箱', 'Sandbox');
     htmlInteractiveText.textContent = tr('交互', 'Interactive');
     htmlSourceText.textContent = tr('源码', 'Source');
+
+    imageFitText.textContent = tr('适应', 'Fit');
+    imageFitBtn.title = tr('自适应侧边栏可视区 (0)', 'Fit to viewport (0)');
+    imageActualBtn.title = tr('原始像素尺寸 100% (1)', 'Actual size 100% (1)');
+    imageZoomOutBtn.title = zoomOutTitle;
+    imageZoomOutBtn.setAttribute('aria-label', zoomOutTitle);
+    imageZoomInBtn.title = zoomInTitle;
+    imageZoomInBtn.setAttribute('aria-label', zoomInTitle);
+
+    const rotLeftTitle = tr('逆时针旋转 90° (Shift+R)', 'Rotate 90° counter-clockwise (Shift+R)');
+    const rotRightTitle = tr('顺时针旋转 90° (R)', 'Rotate 90° clockwise (R)');
+    imageRotateLeftBtn.title = rotLeftTitle;
+    imageRotateLeftBtn.setAttribute('aria-label', rotLeftTitle);
+    imageRotateRightBtn.title = rotRightTitle;
+    imageRotateRightBtn.setAttribute('aria-label', rotRightTitle);
+
+    imageBgCheckerText.textContent = tr('棋盘', 'Grid');
+    imageBgLightText.textContent = tr('浅色', 'Light');
+    imageBgDarkText.textContent = tr('深色', 'Dark');
   }
 
   applyStaticLocaleText();
@@ -838,16 +991,19 @@ export function createToolbar(
       pptGroup.hidden = true;
       wordGroup.hidden = true;
       htmlGroup.hidden = true;
+      imageGroup.hidden = true;
       return;
     }
 
     const wasPptVisible = !pptGroup.hidden;
     const wasHtmlVisible = !htmlGroup.hidden;
+    const wasImageVisible = !imageGroup.hidden;
 
     const isPaged = file.kind === 'ppt' || file.kind === 'pdf' || file.kind === 'excel';
     pptGroup.hidden = !isPaged;
     wordGroup.hidden = file.kind !== 'word';
     htmlGroup.hidden = file.kind !== 'html';
+    imageGroup.hidden = file.kind !== 'image';
 
     if (isPaged) {
       updatePagedControls(state.preview, file.kind);
@@ -856,6 +1012,11 @@ export function createToolbar(
       }
     } else if (file.kind === 'word') {
       updateWordControls(state.preview);
+    } else if (file.kind === 'image') {
+      updateImageControls(state.preview);
+      if (!wasVisible || !wasImageVisible) {
+        imageBgIndicator.update(true);
+      }
     } else {
       updateHtmlControls(state.preview, file);
       if (!wasVisible || !wasHtmlVisible) {
@@ -897,6 +1058,7 @@ export function createToolbar(
     stopSecondaryRoving();
     pptLayoutIndicator.destroy();
     htmlModeIndicator.destroy();
+    imageBgIndicator.destroy();
     window.removeEventListener('keydown', handleGlobalFindShortcut);
     root.remove();
   }

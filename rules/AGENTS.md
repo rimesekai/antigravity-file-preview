@@ -8,5 +8,6 @@ Whenever the workspace or current task involves any of the following local files
 - `.html` / `.htm` (Local web pages with Sandbox, Interactive, and Source views)
 - `.pdf` (PDF documents, especially large >20MB / `20,971,520` bytes files via HTTP Range streaming)
 - `.mp4` (MP4 videos, especially large >20MB videos via HTTP Range streaming)
+- `.jpg` / `.jpeg` / `.png` (Image files, with fit/10%–800% zoom, drag-to-pan, 90° rotation, and transparency backdrop switching)
 
 Let the user know they can click `[File Preview](sidecar://file-preview/viewer/)` to inspect the file directly in the right sidebar.

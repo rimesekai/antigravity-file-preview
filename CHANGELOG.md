@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## v0.4.0 (2026-11-24)
+
+### 新增功能 / Features
+- **新增常见图片格式预览支持（`.jpg` / `.jpeg` / `.png`）**：
+  - **独立静态挂载服务（`/api/image/mount` & `/i/<mountId>/<fileName>`）**：在 `server/htmlServer.mjs` 与 `server/index.mjs` 新增图片安全挂载通道（上限 `256 MB`，自动区分 `image/jpeg` 与 `image/png` MIME 类型并支持 HTTP Range / CORS 与 LRU-32 管理），在 `server/pathSecurity.mjs`、`server/workspaceScanner.mjs` 与 `sidecars/viewer/sidecar.json` 完整接入 `.jpg` / `.jpeg` / `.png` 关联识别与工作区扫描；
+  - **高保真图片渲染器（`src/renderers/imageRenderer.ts` + `src/utils/imageLayout.ts`）**：支持适应可视区（`0`）、`1:1` 原始像素（`1`）与 `10%–800%` 缩放（支持 `Ctrl/Cmd + 滚轮` 指针定点缩放与双击快速切换）、放大溢出后左键/中键拖拽平移画布、90° 步进旋转（`R` / `Shift+R`，自动重算旋转外接包围盒防裁切）、PNG 透明画布背景切换（棋盘格 / 浅色 / 深色）、分辨率/体积/格式/旋转角信息栏，以及文件变化后的预加载无闪烁原地重载；
+  - **工作区筛选与工具栏联动**：工作区文件浏览器新增「图片」分类筛选 Tab 与 `.jpg` / `.jpeg` / `.png` 格式标识徽标，顶部工具栏新增图片缩放、1:1、左右旋转与透明背景分段控制器；
+  - **测试覆盖**：在 `tests/server.test.mjs` 新增图片路径安全、工作区扫描、静态挂载服务、`/api/image/mount` 路由、兜底元信息与旋转/缩放几何布局等单元测试与集成测试。
+
 ## v0.3.7 (2026-11-22)
 
 ### 修复与优化 / Fixes & Improvements

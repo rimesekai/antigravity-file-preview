@@ -185,9 +185,11 @@ const {
 
 const {
   closeHtmlServer,
+  getActiveImageMountCount,
   getActiveMountCount,
   getActivePdfMountCount,
   mountHtmlTarget,
+  mountImageTarget,
   mountPdfTarget,
 } = await import('../server/htmlServer.mjs');
 
@@ -1169,6 +1171,9 @@ describe('fileMeta 兜底文件元信息推断与格式徽标测试', () => {
       { path: 'D:\\data\\table.TsV', kind: 'excel', ext: '.tsv', badge: 'TSV' },
       { path: '/papers/manual.PDF', kind: 'pdf', ext: '.pdf', badge: 'PDF' },
       { path: 'D:\\media\\demo.Mp4', kind: 'mp4', ext: '.mp4', badge: 'MP4' },
+      { path: 'D:\\images\\photo.JPG', kind: 'image', ext: '.jpg', badge: 'JPG' },
+      { path: '/images/banner.jpeg', kind: 'image', ext: '.jpeg', badge: 'JPEG' },
+      { path: 'C:\\assets\\icon.Png', kind: 'image', ext: '.png', badge: 'PNG' },
       { path: '/web/index.HTML', kind: 'html', ext: '.html', badge: 'HTML' },
       { path: '/web/page.htm', kind: 'html', ext: '.htm', badge: 'HTM' },
       { path: 'D:\\notes\\readme.txt', kind: 'word', ext: '.txt', badge: 'DOCX' },
@@ -3624,6 +3629,212 @@ describe('docxPaginator Word 无预渲染分页符几何自动分页测试', () 
     assert.deepEqual(pages[0].children[0].children, [img1, cap1]);
     assert.deepEqual(pages[1].children[0].children, [img2, cap2]);
     assert.deepEqual(pages[2].children[0].children, [img3, cap3]);
+  });
+});
+
+describe('图片 (.jpg / .jpeg / .png) 预览后端挂载与布局几何测试', () => {
+  let tempRoot;
+  let workspaceDir;
+  let distDir;
+  let assetsDir;
+  let running;
+  let baseUrl;
+  const token = 'test-img-token-456';
+
+  before(async () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'fp-image-test-'));
+    workspaceDir = join(tempRoot, 'ws');
+    distDir = join(tempRoot, 'dist');
+    assetsDir = join(tempRoot, 'assets');
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(distDir, { recursive: true });
+    mkdirSync(assetsDir, { recursive: true });
+
+    writeFileSync(join(distDir, 'index.html'), '<html><body>Mock UI</body></html>');
+    writeFileSync(join(distDir, 'app.js'), 'console.log("ui");');
+    writeFileSync(join(distDir, 'pdf.worker.js'), 'console.log("worker");');
+    writeFileSync(join(distDir, 'styles.css'), 'body{}');
+    writeFileSync(join(assetsDir, 'logo.svg'), '<svg></svg>');
+
+    writeFileSync(join(workspaceDir, 'photo.JPG'), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02]));
+    writeFileSync(join(workspaceDir, 'cover.jpeg'), Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x03, 0x04]));
+    writeFileSync(
+      join(workspaceDir, '透明图.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xaa, 0xbb]),
+    );
+    writeFileSync(join(workspaceDir, 'other.pptx'), Buffer.from('PK\x03\x04'));
+
+    process.env.ANTIGRAVITY_SIDECAR_WEB_PORT = '0';
+    process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN = token;
+
+    running = await startServer({
+      distDir,
+      assetsDir,
+      allowedRootsOverride: [workspaceDir],
+    });
+    const addr = running.server.address();
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  after(async () => {
+    await running.close();
+    delete process.env.ANTIGRAVITY_SIDECAR_WEB_PORT;
+    delete process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN;
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it('pathSecurity 与 workspaceScanner 正确识别并扫描 .jpg / .jpeg / .png 为 image 类型', () => {
+    const jpgInfo = validateFilePath(join(workspaceDir, 'photo.JPG'), { allowedRootsOverride: [workspaceDir] });
+    assert.equal(jpgInfo.kind, 'image');
+    assert.equal(jpgInfo.ext, '.jpg');
+
+    const jpegInfo = validateFilePath(join(workspaceDir, 'cover.jpeg'), { allowedRootsOverride: [workspaceDir] });
+    assert.equal(jpegInfo.kind, 'image');
+    assert.equal(jpegInfo.ext, '.jpeg');
+
+    const pngInfo = validateFilePath(join(workspaceDir, '透明图.png'), { allowedRootsOverride: [workspaceDir] });
+    assert.equal(pngInfo.kind, 'image');
+    assert.equal(pngInfo.ext, '.png');
+
+    const scanned = scanWorkspaceFiles([pathToFileURL(workspaceDir).href]);
+    const imageFiles = scanned.filter((item) => item.kind === 'image').map((item) => item.name).sort();
+    assert.deepEqual(imageFiles, ['cover.jpeg', 'photo.JPG', '透明图.png']);
+  });
+
+  it('mountImageTarget 与 POST /api/image/mount 正确挂载并输出对应 MIME、CORS、Range 与 415/413 防护', async () => {
+    const jpgPath = join(workspaceDir, 'photo.JPG');
+    const pngPath = join(workspaceDir, '透明图.png');
+
+    const directMounted = await mountImageTarget(pngPath);
+    assert.match(directMounted.url, /^http:\/\/127\.0\.0\.1:\d+\/i\/[0-9a-f]{48}\//);
+    const pngRes = await fetch(directMounted.url);
+    assert.equal(pngRes.status, 200);
+    assert.equal(pngRes.headers.get('content-type'), 'image/png');
+    assert.equal(pngRes.headers.get('access-control-allow-origin'), '*');
+    assert.equal(pngRes.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual(
+      Buffer.from(await pngRes.arrayBuffer()),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xaa, 0xbb]),
+    );
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Sidecar-Token': token,
+    };
+
+    const apiMountRes = await fetch(`${baseUrl}/api/image/mount`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ file: jpgPath, workspaceUris: [workspaceDir] }),
+    });
+    assert.equal(apiMountRes.status, 200);
+    const apiMountJson = await apiMountRes.json();
+    assert.equal(apiMountJson.fileName, 'photo.JPG');
+
+    const jpgRes = await fetch(apiMountJson.url);
+    assert.equal(jpgRes.status, 200);
+    assert.equal(jpgRes.headers.get('content-type'), 'image/jpeg');
+    assert.deepEqual(
+      Buffer.from(await jpgRes.arrayBuffer()),
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02]),
+    );
+
+    // 非图片文件返回 415
+    const badRes = await fetch(`${baseUrl}/api/image/mount`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ file: join(workspaceDir, 'other.pptx'), workspaceUris: [workspaceDir] }),
+    });
+    assert.equal(badRes.status, 415);
+
+    // 超过 256MB 图片返回 413
+    const oversizedPng = join(workspaceDir, 'huge.png');
+    writeFileSync(oversizedPng, '');
+    truncateSync(oversizedPng, 257 * 1024 * 1024);
+    const tooLargeRes = await fetch(`${baseUrl}/api/image/mount`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ file: oversizedPng, workspaceUris: [workspaceDir] }),
+    });
+    assert.equal(tooLargeRes.status, 413);
+
+    // 图片 LRU 上限 32
+    for (let i = 0; i < 36; i += 1) {
+      await mountImageTarget(jpgPath);
+    }
+    assert.equal(getActiveImageMountCount(), 32);
+  });
+
+  it('imageLayout 正确计算适应视口缩放、小图不放大、90°/270° 旋转包围盒与缩放上下限', async () => {
+    const {
+      normalizeImageRotation,
+      computeImageDisplayMetrics,
+    } = await import('../src/utils/imageLayout.ts');
+
+    assert.equal(normalizeImageRotation(0), 0);
+    assert.equal(normalizeImageRotation(90), 90);
+    assert.equal(normalizeImageRotation(-90), 270);
+    assert.equal(normalizeImageRotation(450), 90);
+    assert.equal(normalizeImageRotation(360), 0);
+
+    // 1. 大图适应视口：2000x1000 放入 432x632（扣除 32px 内边距后可用 400x600）=> 0.2x => 400x200
+    const fitLarge = computeImageDisplayMetrics({
+      naturalWidth: 2000,
+      naturalHeight: 1000,
+      rotation: 0,
+      viewportWidth: 432,
+      viewportHeight: 632,
+      fitMode: true,
+      zoom: 1,
+    });
+    assert.equal(fitLarge.scale, 0.2);
+    assert.equal(fitLarge.rotatedWidth, 400);
+    assert.equal(fitLarge.rotatedHeight, 200);
+
+    // 2. 旋转 90° 后：2000x1000 变为竖向 1000x2000 适应 400x600 => 600/2000 = 0.3x => 外接包围盒 300x600
+    const fitRotated = computeImageDisplayMetrics({
+      naturalWidth: 2000,
+      naturalHeight: 1000,
+      rotation: 90,
+      viewportWidth: 432,
+      viewportHeight: 632,
+      fitMode: true,
+      zoom: 1,
+    });
+    assert.equal(fitRotated.rotation, 90);
+    assert.equal(fitRotated.scale, 0.3);
+    assert.equal(fitRotated.boxWidth, 600);
+    assert.equal(fitRotated.boxHeight, 300);
+    assert.equal(fitRotated.rotatedWidth, 300);
+    assert.equal(fitRotated.rotatedHeight, 600);
+
+    // 3. 小图适应视口时封顶 100%，不模糊放大
+    const fitSmall = computeImageDisplayMetrics({
+      naturalWidth: 120,
+      naturalHeight: 80,
+      rotation: 0,
+      viewportWidth: 500,
+      viewportHeight: 500,
+      fitMode: true,
+      zoom: 1,
+    });
+    assert.equal(fitSmall.scale, 1);
+    assert.equal(fitSmall.rotatedWidth, 120);
+    assert.equal(fitSmall.rotatedHeight, 80);
+
+    // 4. 手动缩放限制在 [0.1, 8.0]
+    const manualMax = computeImageDisplayMetrics({
+      naturalWidth: 100,
+      naturalHeight: 50,
+      rotation: 270,
+      viewportWidth: 500,
+      viewportHeight: 500,
+      fitMode: false,
+      zoom: 12,
+    });
+    assert.equal(manualMax.scale, 8);
+    assert.equal(manualMax.rotatedWidth, 400);
+    assert.equal(manualMax.rotatedHeight, 800);
   });
 });
 

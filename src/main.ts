@@ -5,6 +5,7 @@ import './renderers/renderers.css';
 import type {
   FileStatInfo,
   HtmlPreviewMode,
+  ImageBackgroundMode,
   PptLayoutMode,
   PreviewKind,
   PreviewRenderer,
@@ -17,10 +18,12 @@ import { createExcelRenderer } from './renderers/excelRenderer';
 import { createHtmlRenderer } from './renderers/htmlRenderer';
 import { createPdfRenderer } from './renderers/pdfRenderer';
 import { createVideoRenderer } from './renderers/videoRenderer';
+import { createImageRenderer } from './renderers/imageRenderer';
 import {
   SidecarApiError,
   listWorkspaceFiles,
   mountHtmlFile,
+  mountImageFile,
   mountPdfFile,
   mountVideoFile,
   readFileBuffer,
@@ -76,6 +79,7 @@ function classifyDroppedFile(fileName: string): {
   }
   if (ext === '.pdf') return { kind: 'pdf', ext };
   if (ext === '.mp4') return { kind: 'mp4', ext };
+  if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') return { kind: 'image', ext };
   if (ext === '.html' || ext === '.htm') return { kind: 'html', ext };
 
   if (ext === '.ppt') {
@@ -105,8 +109,8 @@ function classifyDroppedFile(fileName: string): {
     ext,
     errorTitle: tr('不支持的文件格式', 'Unsupported file format'),
     errorMessage: tr(
-      `当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.html 和 .htm 文件（收到：${ext || '无扩展名'}）。`,
-      `Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .html, and .htm files are supported (got: ${ext || 'no extension'}).`,
+      `当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm 文件（收到：${ext || '无扩展名'}）。`,
+      `Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm files are supported (got: ${ext || 'no extension'}).`,
     ),
   };
 }
@@ -123,6 +127,8 @@ function createRendererForKind(kind: PreviewKind): PreviewRenderer {
       return createPdfRenderer();
     case 'mp4':
       return createVideoRenderer();
+    case 'image':
+      return createImageRenderer();
     case 'html':
       return createHtmlRenderer();
   }
@@ -214,8 +220,8 @@ function bootstrap(): void {
     drawerDialog.setAttribute('aria-label', tr('工作区文档列表', 'Workspace file list'));
     dropTitleEl.textContent = tr('松开鼠标即可预览', 'Drop file to preview');
     dropSubEl.textContent = tr(
-      '支持 .pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .html / .htm 本地文件',
-      'Supports .pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .html / .htm files',
+      '支持 .pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .jpg / .jpeg / .png / .html / .htm 本地文件',
+      'Supports .pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .jpg / .jpeg / .png / .html / .htm files',
     );
   };
   applyStaticShellLocale();
@@ -223,7 +229,7 @@ function bootstrap(): void {
   // 错误页内使用的隐藏文件选择器
   const fallbackFileInput = document.createElement('input');
   fallbackFileInput.type = 'file';
-  fallbackFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.html,.htm';
+  fallbackFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.jpg,.jpeg,.png,.html,.htm';
   fallbackFileInput.hidden = true;
 
   const shellStage = document.createElement('div');
@@ -384,6 +390,12 @@ function bootstrap(): void {
       selectionToolbar.hide();
       selectionToolbar.clearSentMark();
       activeRenderer?.setHtmlMode?.(mode);
+    },
+    onRotateImage: (deltaDeg: number) => {
+      activeRenderer?.rotateImage?.(deltaDeg);
+    },
+    onImageBgChange: (mode: ImageBackgroundMode) => {
+      activeRenderer?.setImageBackground?.(mode);
     },
   });
 
@@ -694,6 +706,18 @@ function bootstrap(): void {
       if (typeof preserved.page === 'number' && preserved.page > 1) {
         renderer.goToPage?.(preserved.page);
       }
+    } else if (kind === 'image') {
+      if (preserved.imageBg) {
+        renderer.setImageBackground?.(preserved.imageBg);
+      }
+      if (typeof preserved.rotation === 'number' && preserved.rotation !== 0) {
+        renderer.rotateImage?.(preserved.rotation);
+      }
+      if (preserved.fitMode) {
+        renderer.setZoom?.('fit');
+      } else if (typeof preserved.zoom === 'number') {
+        renderer.setZoom?.(preserved.zoom);
+      }
     }
   }
 
@@ -818,6 +842,26 @@ function bootstrap(): void {
           size: stat.size,
         });
         if (reqId !== loadRequestSeq) return;
+      } else if (stat.kind === 'image') {
+        const mountInfo = await mountImageFile(stat.path);
+        if (reqId !== loadRequestSeq) return;
+
+        currentSource = { type: 'disk', path: stat.path, stat };
+        const imageMeta = {
+          name: stat.name,
+          path: stat.path,
+          ext: stat.ext,
+          size: stat.size,
+        };
+        if (canReuseRenderer && activeRenderer?.loadImage) {
+          await activeRenderer.loadImage(mountInfo, null, imageMeta);
+        } else {
+          const renderer = mountRendererWithState('image', preserved);
+          await renderer.loadImage?.(mountInfo, null, imageMeta);
+          if (reqId !== loadRequestSeq) return;
+          applyPreservedViewOptions(renderer, 'image', preserved);
+        }
+        if (reqId !== loadRequestSeq) return;
       } else {
         const buffer = await readFileBuffer(stat.path);
         if (reqId !== loadRequestSeq) return;
@@ -899,8 +943,8 @@ function bootstrap(): void {
         classified.errorTitle || tr('不支持的文件格式', 'Unsupported file format'),
         classified.errorMessage ||
           tr(
-            '仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.html 和 .htm 文件。',
-            'Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .html, and .htm files are supported.',
+            '仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm 文件。',
+            'Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm files are supported.',
           ),
       );
       return;
@@ -947,6 +991,15 @@ function bootstrap(): void {
         const objectUrl = URL.createObjectURL(file);
         const renderer = mountRendererWithState('mp4');
         await renderer.loadVideo?.(null, objectUrl, {
+          name: file.name,
+          path: file.name,
+          ext: classified.ext,
+          size: file.size,
+        });
+      } else if (classified.kind === 'image') {
+        const objectUrl = URL.createObjectURL(file);
+        const renderer = mountRendererWithState('image');
+        await renderer.loadImage?.(null, objectUrl, {
           name: file.name,
           path: file.name,
           ext: classified.ext,

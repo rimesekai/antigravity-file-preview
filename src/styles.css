@@ -91,6 +91,7 @@ textarea {
 .fp-pdf-scroll,
 .fp-word-viewport,
 .fp-excel-viewport,
+.fp-image-viewport,
 .fp-html-source-body,
 .fp-ppt-thumbs-list,
 .fp-pdf-thumbs-list {
@@ -106,6 +107,7 @@ textarea {
     .fp-pdf-scroll,
     .fp-word-viewport,
     .fp-excel-viewport,
+    .fp-image-viewport,
     .fp-html-source-body
   )::-webkit-scrollbar {
     width: 10px;
@@ -119,6 +121,7 @@ textarea {
     .fp-pdf-scroll,
     .fp-word-viewport,
     .fp-excel-viewport,
+    .fp-image-viewport,
     .fp-html-source-body
   )::-webkit-scrollbar-thumb {
     background-color: var(--fc-scrollbar-thumb);
@@ -134,6 +137,7 @@ textarea {
     .fp-pdf-scroll,
     .fp-word-viewport,
     .fp-excel-viewport,
+    .fp-image-viewport,
     .fp-html-source-body
   )::-webkit-scrollbar-track {
     background: transparent;
@@ -517,6 +521,11 @@ textarea {
 :is(.fp-kind-badge, .fp-file-glyph)[data-kind="mp4"] {
   color: light-dark(#6d28d9, #c084fc);
   background-color: light-dark(#ede9fe, #2b1d45);
+}
+
+:is(.fp-kind-badge, .fp-file-glyph)[data-kind="image"] {
+  color: light-dark(#be185d, #f472b6);
+  background-color: light-dark(#fce7f3, #3b172a);
 }
 
 .fp-status-pill {

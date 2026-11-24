@@ -11,6 +11,9 @@ const EXT_KIND_MAP: Readonly<Record<string, PreviewKind>> = {
   '.tsv': 'excel',
   '.pdf': 'pdf',
   '.mp4': 'mp4',
+  '.jpg': 'image',
+  '.jpeg': 'image',
+  '.png': 'image',
   '.html': 'html',
   '.htm': 'html',
 };
@@ -79,6 +82,10 @@ export function formatKindBadge(kind: PreviewKind, ext: string): string {
       return 'PDF';
     case 'mp4':
       return 'MP4';
+    case 'image':
+      if (normalized === '.png') return 'PNG';
+      if (normalized === '.jpeg') return 'JPEG';
+      return 'JPG';
     case 'html':
       return normalized === '.htm' ? 'HTM' : 'HTML';
   }

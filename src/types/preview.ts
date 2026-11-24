@@ -1,4 +1,4 @@
-export type PreviewKind = 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4';
+export type PreviewKind = 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'image';
 
 export const LARGE_PDF_THRESHOLD_BYTES = 20 * 1024 * 1024;
 
@@ -37,8 +37,16 @@ export interface VideoMountInfo {
   size: number;
 }
 
+export interface ImageMountInfo {
+  url: string;
+  mountId: string;
+  fileName: string;
+  size: number;
+}
+
 export type HtmlPreviewMode = 'sandbox' | 'interactive' | 'source';
 export type PptLayoutMode = 'slide' | 'list';
+export type ImageBackgroundMode = 'checker' | 'light' | 'dark';
 
 export interface PreviewStateInfo {
   kind: PreviewKind;
@@ -56,6 +64,10 @@ export interface PreviewStateInfo {
   rowCount?: number;
   colCount?: number;
   fileSize?: number;
+  rotation?: number;
+  imageWidth?: number;
+  imageHeight?: number;
+  imageBg?: ImageBackgroundMode;
   warning?: string;
 }
 
@@ -79,8 +91,15 @@ export interface PreviewRenderer {
     objectUrl: string | null,
     meta: { name: string; path: string; ext: string; size?: number }
   ): Promise<void>;
+  loadImage?(
+    mountInfo: ImageMountInfo | null,
+    objectUrl: string | null,
+    meta: { name: string; path: string; ext: string; size?: number }
+  ): Promise<void>;
   refresh?(): Promise<void>;
   setZoom?(zoom: number | 'fit'): void;
+  rotateImage?(deltaDeg: number): void;
+  setImageBackground?(mode: ImageBackgroundMode): void;
   nextPage?(): void;
   prevPage?(): void;
   goToPage?(page: number): void;

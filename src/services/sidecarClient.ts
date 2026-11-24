@@ -1,6 +1,7 @@
 import type {
   FileStatInfo,
   HtmlMountInfo,
+  ImageMountInfo,
   PdfMountInfo,
   VideoMountInfo,
   WorkspaceFileItem,
@@ -133,8 +134,8 @@ function fallbackMessageByStatus(status: number): string {
       );
     case 415:
       return tr(
-        '暂不支持该文件格式，当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.html 和 .htm。',
-        'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .html, and .htm are supported.',
+        '暂不支持该文件格式，当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm。',
+        'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm are supported.',
       );
     default:
       return status >= 500
@@ -335,6 +336,14 @@ export async function mountPdfFile(file: string): Promise<PdfMountInfo> {
 export async function mountVideoFile(file: string): Promise<VideoMountInfo> {
   const workspaceUris = await getWorkspaceUrisSafe();
   return postJson<VideoMountInfo>('/api/video/mount', { file, workspaceUris });
+}
+
+/**
+ * 将本地图片（.jpg / .jpeg / .png）挂载到静态预览端点，返回可加载的 URL 与挂载信息。
+ */
+export async function mountImageFile(file: string): Promise<ImageMountInfo> {
+  const workspaceUris = await getWorkspaceUrisSafe();
+  return postJson<ImageMountInfo>('/api/image/mount', { file, workspaceUris });
 }
 
 /**
