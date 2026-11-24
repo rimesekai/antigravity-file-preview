@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## v0.5.0 (2026-11-24)
+
+### 新增功能 / Features
+- **补齐主流图片全格式、音频流式播放器与 WebM 视频支持**：
+  - **图片生态全覆盖（`.webp` / `.gif` / `.svg` / `.bmp` / `.ico` / `.avif`）**：在 `server/pathSecurity.mjs`、`server/workspaceScanner.mjs`、`server/htmlServer.mjs` 与 `src/renderers/imageRenderer.ts` 中将图片预览扩展至 `.jpg`/`.jpeg`/`.png`/`.webp`/`.gif`/`.svg`/`.bmp`/`.ico`/`.avif`；对 `image/svg+xml` 响应自动附加 `Content-Security-Policy` 沙箱隔离头阻断内联脚本，同时修复无显式尺寸属性 SVG 的默认包围盒回退尺寸（`300×150`），全面复用缩放、旋转、平移与透明棋盘格/浅/深背景切换能力；
+  - **新增音频流式播放器（`.mp3` / `.wav` / `.m4a` / `.ogg` / `.flac`）**：在服务端新增 `/api/audio/mount` 与 `/a/<mountId>/<fileName>` HTTP `206` Range 流式通道（上限 `1 GB`），前端新增 `src/renderers/audioRenderer.ts`，支持实时进度/总时长显示、0.5x–2x 倍速切换、循环播放、动态播放脉冲动画（遵循 `prefers-reduced-motion`）与工作区「音频」分类筛选 Tab；
+  - **新增 `.webm` 视频流式支持**：扩展 `/api/video/mount` 与 `videoRenderer` 支持 `.webm`（`video/webm`），工作区筛选标签同步升级为「视频 / Video」；
+  - **测试覆盖**：在 `tests/server.test.mjs` 新增 WebP/GIF/SVG/AVIF、SVG CSP 隔离头、WebM 视频挂载、音频流式挂载（含 415/413 与 LRU-32 边界）与全格式 `fileMeta` 测试。
+
 ## v0.4.0 (2026-11-24)
 
 ### 新增功能 / Features

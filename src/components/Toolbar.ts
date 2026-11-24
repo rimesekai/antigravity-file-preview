@@ -958,7 +958,7 @@ export function createToolbar(
         ? tr(`${file.name}（本地拖拽文件）`, `${file.name} (Local dropped file)`)
         : file.path;
       largePdfBadge.hidden = !(
-        (file.kind === 'pdf' || file.kind === 'mp4') &&
+        (file.kind === 'pdf' || file.kind === 'mp4' || file.kind === 'audio') &&
         (file.size ?? 0) > LARGE_PDF_THRESHOLD_BYTES
       );
       dropTag.hidden = !file.isLocalDrop;
@@ -985,7 +985,9 @@ export function createToolbar(
       ? tr('每 2.5 秒检查一次磁盘修改时间并自动刷新', 'Check file changes every 2.5s and auto-reload')
       : tr('拖拽的本地内存文件无磁盘路径，暂不支持自动监听刷新', 'Dropped local files have no disk path for auto-refresh');
 
-    const showFormatRow = Boolean(file && !state.hasError && file.kind !== 'mp4');
+    const showFormatRow = Boolean(
+      file && !state.hasError && file.kind !== 'mp4' && file.kind !== 'audio',
+    );
     secondaryRow.hidden = !showFormatRow;
     if (!showFormatRow || !file) {
       pptGroup.hidden = true;

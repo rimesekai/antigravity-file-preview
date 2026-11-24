@@ -22,9 +22,21 @@ const SUPPORTED_EXTS = new Map([
   ['.tsv', 'excel'],
   ['.pdf', 'pdf'],
   ['.mp4', 'mp4'],
+  ['.webm', 'mp4'],
+  ['.mp3', 'audio'],
+  ['.wav', 'audio'],
+  ['.m4a', 'audio'],
+  ['.ogg', 'audio'],
+  ['.flac', 'audio'],
   ['.jpg', 'image'],
   ['.jpeg', 'image'],
   ['.png', 'image'],
+  ['.webp', 'image'],
+  ['.gif', 'image'],
+  ['.svg', 'image'],
+  ['.bmp', 'image'],
+  ['.ico', 'image'],
+  ['.avif', 'image'],
   ['.html', 'html'],
   ['.htm', 'html'],
 ]);
@@ -43,7 +55,7 @@ function isIgnoredTempFile(name) {
 }
 
 /**
- * 递归扫描工作区中的可预览文件（.pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .jpg / .jpeg / .png / .html / .htm）。
+ * 递归扫描工作区中的可预览文件。
  * @param {string[] | string} [workspaceUris]
  * @param {object} [options]
  * @param {string} [options.currentFile] 当前打开的文件路径或 URI，在无可用根目录时回退扫描其所在目录
@@ -53,7 +65,7 @@ function isIgnoredTempFile(name) {
  *   path: string,
  *   name: string,
  *   ext: string,
- *   kind: 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'image',
+ *   kind: 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'audio' | 'image',
  *   size: number,
  *   mtimeMs: number,
  *   relPath: string,

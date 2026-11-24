@@ -11,9 +11,21 @@ const EXT_KIND_MAP: Readonly<Record<string, PreviewKind>> = {
   '.tsv': 'excel',
   '.pdf': 'pdf',
   '.mp4': 'mp4',
+  '.webm': 'mp4',
+  '.mp3': 'audio',
+  '.wav': 'audio',
+  '.m4a': 'audio',
+  '.ogg': 'audio',
+  '.flac': 'audio',
   '.jpg': 'image',
   '.jpeg': 'image',
   '.png': 'image',
+  '.webp': 'image',
+  '.gif': 'image',
+  '.svg': 'image',
+  '.bmp': 'image',
+  '.ico': 'image',
+  '.avif': 'image',
   '.html': 'html',
   '.htm': 'html',
 };
@@ -81,10 +93,22 @@ export function formatKindBadge(kind: PreviewKind, ext: string): string {
     case 'pdf':
       return 'PDF';
     case 'mp4':
-      return 'MP4';
+      return normalized === '.webm' ? 'WEBM' : 'MP4';
+    case 'audio':
+      if (normalized === '.wav') return 'WAV';
+      if (normalized === '.m4a') return 'M4A';
+      if (normalized === '.ogg') return 'OGG';
+      if (normalized === '.flac') return 'FLAC';
+      return 'MP3';
     case 'image':
       if (normalized === '.png') return 'PNG';
       if (normalized === '.jpeg') return 'JPEG';
+      if (normalized === '.webp') return 'WEBP';
+      if (normalized === '.gif') return 'GIF';
+      if (normalized === '.svg') return 'SVG';
+      if (normalized === '.bmp') return 'BMP';
+      if (normalized === '.ico') return 'ICO';
+      if (normalized === '.avif') return 'AVIF';
       return 'JPG';
     case 'html':
       return normalized === '.htm' ? 'HTM' : 'HTML';

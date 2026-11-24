@@ -24,7 +24,16 @@ export const MIME_TYPES = Object.freeze({
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
   '.ico': 'image/x-icon',
+  '.avif': 'image/avif',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
@@ -37,6 +46,7 @@ const mounts = new Map();
 /** @type {Map<string, { filePath: string, fileName: string, size: number, contentType?: string, createdAt: number }>} */
 const pdfMounts = new Map();
 const videoMounts = new Map();
+const audioMounts = new Map();
 const imageMounts = new Map();
 
 const PDF_CORS_HEADERS = Object.freeze({
@@ -183,13 +193,17 @@ function handleRangeMountRequest(req, res, rawPathname, mountMap, routePrefix, c
   }
 
   const totalSize = stat.size;
+  const resolvedContentType = mount.contentType || contentType;
   const baseHeaders = {
     ...PDF_CORS_HEADERS,
     'Accept-Ranges': 'bytes',
-    'Content-Type': mount.contentType || contentType,
+    'Content-Type': resolvedContentType,
     'Content-Disposition': 'inline',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store',
+    ...(resolvedContentType === 'image/svg+xml'
+      ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:" }
+      : {}),
   };
 
   const rangeHeader = req.headers.range;
@@ -297,6 +311,11 @@ function handlePreviewRequest(req, res) {
 
   if (rawPathname.startsWith('/v/')) {
     handleRangeMountRequest(req, res, rawPathname, videoMounts, 'v', 'video/mp4');
+    return;
+  }
+
+  if (rawPathname.startsWith('/a/')) {
+    handleRangeMountRequest(req, res, rawPathname, audioMounts, 'a', 'audio/mpeg');
     return;
   }
 
@@ -563,34 +582,50 @@ export async function mountPdfTarget(resolvedFilePath) {
 }
 
 /**
- * 将合法的本地 .mp4 文件注册为独立端口 HTTP Range 流式播放挂载点。
+ * 将合法的本地 .mp4 / .webm 文件注册为独立端口 HTTP Range 流式播放挂载点。
  * @param {string} resolvedFilePath 已通过安全校验的真实文件路径
  * @returns {Promise<{ url: string, mountId: string, fileName: string, size: number }>}
  */
 export async function mountVideoTarget(resolvedFilePath) {
   return mountRangeTarget(
     resolvedFilePath,
-    '.mp4',
+    ['.mp4', '.webm'],
     'v',
     videoMounts,
     'INVALID_VIDEO_TARGET',
-    '仅支持挂载 .mp4 文件',
+    '仅支持挂载 .mp4 或 .webm 视频文件',
   );
 }
 
 /**
- * 将合法的本地 .jpg / .jpeg / .png 图片文件注册为独立端口静态预览挂载点。
+ * 将合法的本地音频文件（.mp3 / .wav / .m4a / .ogg / .flac）注册为独立端口 HTTP Range 流式播放挂载点。
+ * @param {string} resolvedFilePath 已通过安全校验的真实文件路径
+ * @returns {Promise<{ url: string, mountId: string, fileName: string, size: number }>}
+ */
+export async function mountAudioTarget(resolvedFilePath) {
+  return mountRangeTarget(
+    resolvedFilePath,
+    ['.mp3', '.wav', '.m4a', '.ogg', '.flac'],
+    'a',
+    audioMounts,
+    'INVALID_AUDIO_TARGET',
+    '仅支持挂载 .mp3、.wav、.m4a、.ogg 或 .flac 音频文件',
+  );
+}
+
+/**
+ * 将合法的本地图片文件（.jpg / .jpeg / .png / .webp / .gif / .svg / .bmp / .ico / .avif）注册为独立端口静态预览挂载点。
  * @param {string} resolvedFilePath 已通过安全校验的真实文件路径
  * @returns {Promise<{ url: string, mountId: string, fileName: string, size: number }>}
  */
 export async function mountImageTarget(resolvedFilePath) {
   return mountRangeTarget(
     resolvedFilePath,
-    ['.jpg', '.jpeg', '.png'],
+    ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.bmp', '.ico', '.avif'],
     'i',
     imageMounts,
     'INVALID_IMAGE_TARGET',
-    '仅支持挂载 .jpg、.jpeg 或 .png 图片文件',
+    '仅支持挂载 .jpg、.jpeg、.png、.webp、.gif、.svg、.bmp、.ico 或 .avif 图片文件',
   );
 }
 
@@ -619,6 +654,14 @@ export function getActiveVideoMountCount() {
 }
 
 /**
+ * 获取当前活跃音频挂载数量（供测试与监控使用）。
+ * @returns {number}
+ */
+export function getActiveAudioMountCount() {
+  return audioMounts.size;
+}
+
+/**
  * 获取当前活跃图片挂载数量（供测试与监控使用）。
  * @returns {number}
  */
@@ -627,13 +670,14 @@ export function getActiveImageMountCount() {
 }
 
 /**
- * 关闭独立 HTML/PDF/MP4/Image 静态预览服务并清理所有挂载点。
+ * 关闭独立 HTML/PDF/Video/Audio/Image 静态预览服务并清理所有挂载点。
  * @returns {Promise<void>}
  */
 export async function closeHtmlServer() {
   mounts.clear();
   pdfMounts.clear();
   videoMounts.clear();
+  audioMounts.clear();
   imageMounts.clear();
   listeningPromise = null;
   serverPort = 0;

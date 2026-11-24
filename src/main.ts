@@ -18,10 +18,12 @@ import { createExcelRenderer } from './renderers/excelRenderer';
 import { createHtmlRenderer } from './renderers/htmlRenderer';
 import { createPdfRenderer } from './renderers/pdfRenderer';
 import { createVideoRenderer } from './renderers/videoRenderer';
+import { createAudioRenderer } from './renderers/audioRenderer';
 import { createImageRenderer } from './renderers/imageRenderer';
 import {
   SidecarApiError,
   listWorkspaceFiles,
+  mountAudioFile,
   mountHtmlFile,
   mountImageFile,
   mountPdfFile,
@@ -78,8 +80,23 @@ function classifyDroppedFile(fileName: string): {
     return { kind: 'excel', ext };
   }
   if (ext === '.pdf') return { kind: 'pdf', ext };
-  if (ext === '.mp4') return { kind: 'mp4', ext };
-  if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') return { kind: 'image', ext };
+  if (ext === '.mp4' || ext === '.webm') return { kind: 'mp4', ext };
+  if (ext === '.mp3' || ext === '.wav' || ext === '.m4a' || ext === '.ogg' || ext === '.flac') {
+    return { kind: 'audio', ext };
+  }
+  if (
+    ext === '.jpg' ||
+    ext === '.jpeg' ||
+    ext === '.png' ||
+    ext === '.webp' ||
+    ext === '.gif' ||
+    ext === '.svg' ||
+    ext === '.bmp' ||
+    ext === '.ico' ||
+    ext === '.avif'
+  ) {
+    return { kind: 'image', ext };
+  }
   if (ext === '.html' || ext === '.htm') return { kind: 'html', ext };
 
   if (ext === '.ppt') {
@@ -109,8 +126,8 @@ function classifyDroppedFile(fileName: string): {
     ext,
     errorTitle: tr('不支持的文件格式', 'Unsupported file format'),
     errorMessage: tr(
-      `当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm 文件（收到：${ext || '无扩展名'}）。`,
-      `Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm files are supported (got: ${ext || 'no extension'}).`,
+      `当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.webm、.mp3、.wav、.m4a、.ogg、.flac、.jpg、.jpeg、.png、.webp、.gif、.svg、.bmp、.ico、.avif、.html 和 .htm 文件（收到：${ext || '无扩展名'}）。`,
+      `Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .webm, .mp3, .wav, .m4a, .ogg, .flac, .jpg, .jpeg, .png, .webp, .gif, .svg, .bmp, .ico, .avif, .html, and .htm files are supported (got: ${ext || 'no extension'}).`,
     ),
   };
 }
@@ -127,6 +144,8 @@ function createRendererForKind(kind: PreviewKind): PreviewRenderer {
       return createPdfRenderer();
     case 'mp4':
       return createVideoRenderer();
+    case 'audio':
+      return createAudioRenderer();
     case 'image':
       return createImageRenderer();
     case 'html':
@@ -220,8 +239,8 @@ function bootstrap(): void {
     drawerDialog.setAttribute('aria-label', tr('工作区文档列表', 'Workspace file list'));
     dropTitleEl.textContent = tr('松开鼠标即可预览', 'Drop file to preview');
     dropSubEl.textContent = tr(
-      '支持 .pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .jpg / .jpeg / .png / .html / .htm 本地文件',
-      'Supports .pptx / .docx / .xlsx / .xls / .csv / .tsv / .pdf / .mp4 / .jpg / .jpeg / .png / .html / .htm files',
+      '支持 Office 文档 / PDF / 常见图片 / 音视频 / HTML 本地文件',
+      'Supports Office docs / PDF / Images / Audio & Video / HTML files',
     );
   };
   applyStaticShellLocale();
@@ -229,7 +248,7 @@ function bootstrap(): void {
   // 错误页内使用的隐藏文件选择器
   const fallbackFileInput = document.createElement('input');
   fallbackFileInput.type = 'file';
-  fallbackFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.jpg,.jpeg,.png,.html,.htm';
+  fallbackFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.webm,.mp3,.wav,.m4a,.ogg,.flac,.jpg,.jpeg,.png,.webp,.gif,.svg,.bmp,.ico,.avif,.html,.htm';
   fallbackFileInput.hidden = true;
 
   const shellStage = document.createElement('div');
@@ -842,6 +861,19 @@ function bootstrap(): void {
           size: stat.size,
         });
         if (reqId !== loadRequestSeq) return;
+      } else if (stat.kind === 'audio') {
+        const mountInfo = await mountAudioFile(stat.path);
+        if (reqId !== loadRequestSeq) return;
+
+        currentSource = { type: 'disk', path: stat.path, stat };
+        const renderer = mountRendererWithState('audio', preserved);
+        await renderer.loadAudio?.(mountInfo, null, {
+          name: stat.name,
+          path: stat.path,
+          ext: stat.ext,
+          size: stat.size,
+        });
+        if (reqId !== loadRequestSeq) return;
       } else if (stat.kind === 'image') {
         const mountInfo = await mountImageFile(stat.path);
         if (reqId !== loadRequestSeq) return;
@@ -943,8 +975,8 @@ function bootstrap(): void {
         classified.errorTitle || tr('不支持的文件格式', 'Unsupported file format'),
         classified.errorMessage ||
           tr(
-            '仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm 文件。',
-            'Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm files are supported.',
+            '不支持该文件格式，请确认文件为受支持的文档、图片、音视频或网页格式。',
+            'Unsupported file format. Please choose a supported document, image, audio, video, or HTML file.',
           ),
       );
       return;
@@ -991,6 +1023,15 @@ function bootstrap(): void {
         const objectUrl = URL.createObjectURL(file);
         const renderer = mountRendererWithState('mp4');
         await renderer.loadVideo?.(null, objectUrl, {
+          name: file.name,
+          path: file.name,
+          ext: classified.ext,
+          size: file.size,
+        });
+      } else if (classified.kind === 'audio') {
+        const objectUrl = URL.createObjectURL(file);
+        const renderer = mountRendererWithState('audio');
+        await renderer.loadAudio?.(null, objectUrl, {
           name: file.name,
           path: file.name,
           ext: classified.ext,

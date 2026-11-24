@@ -29,9 +29,21 @@ const SUPPORTED_FORMATS = new Map([
   ['.tsv', 'excel'],
   ['.pdf', 'pdf'],
   ['.mp4', 'mp4'],
+  ['.webm', 'mp4'],
+  ['.mp3', 'audio'],
+  ['.wav', 'audio'],
+  ['.m4a', 'audio'],
+  ['.ogg', 'audio'],
+  ['.flac', 'audio'],
   ['.jpg', 'image'],
   ['.jpeg', 'image'],
   ['.png', 'image'],
+  ['.webp', 'image'],
+  ['.gif', 'image'],
+  ['.svg', 'image'],
+  ['.bmp', 'image'],
+  ['.ico', 'image'],
+  ['.avif', 'image'],
   ['.html', 'html'],
   ['.htm', 'html'],
 ]);
@@ -226,7 +238,7 @@ export function findDeepestWorkspaceRoot(targetPath, workspaceRoots, platform = 
 /**
  * 根据文件扩展名校验并返回格式分类。
  * @param {string} filePath
- * @returns {{ ext: string, kind: 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'image' }}
+ * @returns {{ ext: string, kind: 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'audio' | 'image' }}
  */
 export function classifyFormat(filePath) {
   const ext = extname(filePath).toLowerCase();
@@ -242,7 +254,7 @@ export function classifyFormat(filePath) {
 
   throw new HttpError(
     415,
-    `不支持的文件格式（${ext || '无扩展名'}），目前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm 文件。`,
+    `不支持的文件格式（${ext || '无扩展名'}），目前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.webm、.mp3、.wav、.m4a、.ogg、.flac、.jpg、.jpeg、.png、.webp、.gif、.svg、.bmp、.ico、.avif、.html 和 .htm 文件。`,
     'UNSUPPORTED_FORMAT',
   );
 }
@@ -259,7 +271,7 @@ export function classifyFormat(filePath) {
  *   requestedPath: string,
  *   name: string,
  *   ext: string,
- *   kind: 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'image',
+ *   kind: 'ppt' | 'word' | 'excel' | 'html' | 'pdf' | 'mp4' | 'audio' | 'image',
  *   size: number,
  *   mtimeMs: number,
  *   workspaceRoot: string | null,

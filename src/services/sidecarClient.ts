@@ -1,4 +1,5 @@
 import type {
+  AudioMountInfo,
   FileStatInfo,
   HtmlMountInfo,
   ImageMountInfo,
@@ -134,8 +135,8 @@ function fallbackMessageByStatus(status: number): string {
       );
     case 415:
       return tr(
-        '暂不支持该文件格式，当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.jpg、.jpeg、.png、.html 和 .htm。',
-        'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm are supported.',
+        '暂不支持该文件格式，当前仅支持 .pptx、.docx、.xlsx、.xls、.csv、.tsv、.pdf、.mp4、.webm、.mp3、.wav、.m4a、.ogg、.flac、.jpg、.jpeg、.png、.webp、.gif、.svg、.bmp、.ico、.avif、.html 和 .htm。',
+        'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .webm, .mp3, .wav, .m4a, .ogg, .flac, .jpg, .jpeg, .png, .webp, .gif, .svg, .bmp, .ico, .avif, .html, and .htm are supported.',
       );
     default:
       return status >= 500
@@ -331,7 +332,7 @@ export async function mountPdfFile(file: string): Promise<PdfMountInfo> {
 }
 
 /**
- * 将本地 MP4 文件挂载到流式 Range 播放端点，返回可流式播放的 URL 与挂载信息。
+ * 将本地视频文件（.mp4 / .webm）挂载到流式 Range 播放端点，返回可流式播放的 URL 与挂载信息。
  */
 export async function mountVideoFile(file: string): Promise<VideoMountInfo> {
   const workspaceUris = await getWorkspaceUrisSafe();
@@ -339,7 +340,15 @@ export async function mountVideoFile(file: string): Promise<VideoMountInfo> {
 }
 
 /**
- * 将本地图片（.jpg / .jpeg / .png）挂载到静态预览端点，返回可加载的 URL 与挂载信息。
+ * 将本地音频文件（.mp3 / .wav / .m4a / .ogg / .flac）挂载到流式 Range 播放端点，返回可流式播放的 URL 与挂载信息。
+ */
+export async function mountAudioFile(file: string): Promise<AudioMountInfo> {
+  const workspaceUris = await getWorkspaceUrisSafe();
+  return postJson<AudioMountInfo>('/api/audio/mount', { file, workspaceUris });
+}
+
+/**
+ * 将本地图片（.jpg / .jpeg / .png / .webp / .gif / .svg / .bmp / .ico / .avif）挂载到静态预览端点，返回可加载的 URL 与挂载信息。
  */
 export async function mountImageFile(file: string): Promise<ImageMountInfo> {
   const workspaceUris = await getWorkspaceUrisSafe();

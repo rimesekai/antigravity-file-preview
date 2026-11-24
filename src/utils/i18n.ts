@@ -186,7 +186,7 @@ export function translateApiErrorMessage(
     case 'UNSUPPORTED_LEGACY_DOC':
       return 'Legacy binary .doc format is not supported. Please save it as .docx in Word or WPS first.';
     case 'UNSUPPORTED_FORMAT':
-      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm are supported.';
+      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .webm, .mp3, .wav, .m4a, .ogg, .flac, .jpg, .jpeg, .png, .webp, .gif, .svg, .bmp, .ico, .avif, .html, and .htm are supported.';
     case 'INVALID_PATH':
       return 'Invalid file path parameter; expected a string.';
     case 'NULL_BYTE_PATH':
@@ -212,9 +212,11 @@ export function translateApiErrorMessage(
     case 'NOT_PDF_FILE':
       return 'Only .pdf files can be mounted to the PDF streaming server.';
     case 'NOT_VIDEO_FILE':
-      return 'Only .mp4 files can be mounted to the video streaming server.';
+      return 'Only .mp4 or .webm video files can be mounted to the video streaming server.';
+    case 'NOT_AUDIO_FILE':
+      return 'Only .mp3, .wav, .m4a, .ogg, or .flac audio files can be mounted to the audio streaming server.';
     case 'NOT_IMAGE_FILE':
-      return 'Only .jpg, .jpeg, or .png image files can be mounted to the image preview server.';
+      return 'Only .jpg, .jpeg, .png, .webp, .gif, .svg, .bmp, .ico, or .avif image files can be mounted to the image preview server.';
     case 'FILE_TOO_LARGE':
       return 'File size exceeds the safety limit for direct preview.';
     default:
@@ -238,7 +240,7 @@ export function translateApiErrorMessage(
     case 413:
       return 'File size exceeds the in-memory preview limit (60MB for parsed documents).';
     case 415:
-      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .jpg, .jpeg, .png, .html, and .htm are supported.';
+      return 'Unsupported file format. Only .pptx, .docx, .xlsx, .xls, .csv, .tsv, .pdf, .mp4, .webm, .mp3, .wav, .m4a, .ogg, .flac, .jpg, .jpeg, .png, .webp, .gif, .svg, .bmp, .ico, .avif, .html, and .htm are supported.';
     default:
       return status >= 500
         ? `Preview service internal error (HTTP ${status}). Please try again later.`

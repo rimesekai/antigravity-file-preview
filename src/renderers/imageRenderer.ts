@@ -63,8 +63,8 @@ function preloadImageElement(src: string): Promise<{ width: number; height: numb
     };
 
     probe.onload = () => {
-      const width = probe.naturalWidth || 1;
-      const height = probe.naturalHeight || 1;
+      const width = probe.naturalWidth || 300;
+      const height = probe.naturalHeight || 150;
       if (typeof probe.decode === 'function') {
         void probe.decode().catch(() => {
           // 部分图片在已触发 onload 后 decode 仍可能因离线环境抛错，降级直接放行展示
@@ -83,8 +83,8 @@ function preloadImageElement(src: string): Promise<{ width: number; height: numb
       reject(
         new Error(
           tr(
-            '图片加载或解码失败，请确认文件未损坏且为有效的 JPG/PNG 图片。',
-            'Failed to load or decode image. Verify the file is a valid, uncorrupted JPG/PNG image.',
+            '图片加载或解码失败，请确认文件未损坏且为有效的图片格式。',
+            'Failed to load or decode image. Verify the file is a valid, uncorrupted image.',
           ),
         ),
       );

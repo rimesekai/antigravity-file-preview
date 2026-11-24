@@ -68,11 +68,25 @@ function getKindShortLabel(kind: PreviewKind, ext: string): string {
     return 'XLS';
   }
   if (kind === 'pdf') return 'PDF';
-  if (kind === 'mp4') return 'MP4';
+  if (kind === 'mp4') return ext.toLowerCase() === '.webm' ? 'WEBM' : 'MP4';
+  if (kind === 'audio') {
+    const normalized = ext.toLowerCase();
+    if (normalized === '.wav') return 'WAV';
+    if (normalized === '.m4a') return 'M4A';
+    if (normalized === '.ogg') return 'OGG';
+    if (normalized === '.flac') return 'FLAC';
+    return 'MP3';
+  }
   if (kind === 'image') {
     const normalized = ext.toLowerCase();
     if (normalized === '.png') return 'PNG';
     if (normalized === '.jpeg') return 'JPEG';
+    if (normalized === '.webp') return 'WEBP';
+    if (normalized === '.gif') return 'GIF';
+    if (normalized === '.svg') return 'SVG';
+    if (normalized === '.bmp') return 'BMP';
+    if (normalized === '.ico') return 'ICO';
+    if (normalized === '.avif') return 'AVIF';
     return 'JPG';
   }
   return ext.toLowerCase() === '.htm' ? 'HTM' : 'HTML';
@@ -253,7 +267,7 @@ export function createWorkspaceBrowser(
 
   const hiddenFileInput = document.createElement('input');
   hiddenFileInput.type = 'file';
-  hiddenFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.jpg,.jpeg,.png,.html,.htm';
+  hiddenFileInput.accept = '.pptx,.docx,.xlsx,.xls,.csv,.tsv,.pdf,.mp4,.webm,.mp3,.wav,.m4a,.ogg,.flac,.jpg,.jpeg,.png,.webp,.gif,.svg,.bmp,.ico,.avif,.html,.htm';
   hiddenFileInput.hidden = true;
   hiddenFileInput.addEventListener('change', () => {
     const picked = hiddenFileInput.files?.[0];
@@ -326,7 +340,9 @@ export function createWorkspaceBrowser(
       case 'pdf':
         return 'PDF';
       case 'mp4':
-        return 'MP4';
+        return tr('视频', 'Video');
+      case 'audio':
+        return tr('音频', 'Audio');
       case 'image':
         return tr('图片', 'Image');
       case 'html':
@@ -334,7 +350,7 @@ export function createWorkspaceBrowser(
     }
   };
 
-  const filterKeys: BrowserKindFilter[] = ['all', 'html', 'pdf', 'image', 'word', 'excel', 'ppt', 'mp4'];
+  const filterKeys: BrowserKindFilter[] = ['all', 'html', 'pdf', 'image', 'audio', 'word', 'excel', 'ppt', 'mp4'];
   const filterButtons = new Map<
     BrowserKindFilter,
     { btn: HTMLButtonElement; label: HTMLSpanElement; count: HTMLSpanElement }
@@ -408,6 +424,7 @@ export function createWorkspaceBrowser(
       excel: 0,
       pdf: 0,
       mp4: 0,
+      audio: 0,
       image: 0,
       html: 0,
     };
@@ -510,7 +527,7 @@ export function createWorkspaceBrowser(
       renderTruncatableFileName(nameEl, file.name);
       nameRow.appendChild(nameEl);
 
-      if ((file.kind === 'pdf' || file.kind === 'mp4') && file.size > LARGE_PDF_THRESHOLD_BYTES) {
+      if ((file.kind === 'pdf' || file.kind === 'mp4' || file.kind === 'audio') && file.size > LARGE_PDF_THRESHOLD_BYTES) {
         const largeBadge = document.createElement('span');
         largeBadge.className = 'fp-status-pill fp-status-pill--warn';
         largeBadge.textContent = tr('>20MB 流式', '>20MB Stream');
@@ -560,7 +577,7 @@ export function createWorkspaceBrowser(
       );
       heroStatusChip.className = 'fc-chip fc-chip--ok fp-hero-status-chip';
     }
-    heroFormatsText.textContent = 'PPTX · DOCX · XLSX · PDF · MP4 · JPG · PNG · HTML';
+    heroFormatsText.textContent = 'PPTX · DOCX · XLSX · PDF · IMG · AUDIO · VIDEO · HTML';
 
     drawerTitle.textContent = tr('工作区文档', 'Workspace Files');
     const closeTitle = tr('关闭文件列表', 'Close file list');

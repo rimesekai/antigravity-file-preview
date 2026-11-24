@@ -523,6 +523,11 @@ textarea {
   background-color: light-dark(#ede9fe, #2b1d45);
 }
 
+:is(.fp-kind-badge, .fp-file-glyph)[data-kind="audio"] {
+  color: light-dark(#0369a1, #38bdf8);
+  background-color: light-dark(#e0f2fe, #122c3f);
+}
+
 :is(.fp-kind-badge, .fp-file-glyph)[data-kind="image"] {
   color: light-dark(#be185d, #f472b6);
   background-color: light-dark(#fce7f3, #3b172a);

@@ -27,6 +27,7 @@ export type IconName =
   | 'code'
   | 'rotateLeft'
   | 'rotateRight'
+  | 'music'
   | 'fileText';
 
 interface IconShape {
@@ -138,6 +139,13 @@ const ICON_MAP: Record<IconName, IconShape> = {
   },
   rotateRight: {
     paths: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'],
+  },
+  music: {
+    paths: ['M9 18V5l12-2v13'],
+    circles: [
+      { cx: 6, cy: 18, r: 3 },
+      { cx: 18, cy: 16, r: 3 },
+    ],
   },
   fileText: {
     paths: [

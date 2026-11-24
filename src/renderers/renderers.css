@@ -683,6 +683,151 @@
 }
 
 /* ==========================================================================
+ * 音频流式播放器 (.fp-audio-*)
+ * ========================================================================== */
+
+.fp-audio-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background-color: var(--fc-surface-page);
+}
+
+.fp-audio-infobar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--fc-surface-chrome);
+  border-bottom: 1px solid var(--fc-divider-subtle);
+  font-size: 12px;
+  color: var(--fc-on-surface-variant);
+}
+
+.fp-audio-meta-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fp-audio-controls-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fp-audio-rate-select {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--fc-radius-pill);
+  background-color: var(--fc-surface-block);
+  color: var(--fc-on-surface);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.fp-audio-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+}
+
+.fp-audio-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fp-audio-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.fp-audio-art {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background-color: light-dark(#e0f2fe, #122c3f);
+  color: light-dark(#0369a1, #38bdf8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fp-audio-art.is-playing {
+    animation: fp-audio-pulse 1.8s ease-in-out infinite;
+  }
+
+  @keyframes fp-audio-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+  }
+}
+
+.fp-audio-title-wrap {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fp-audio-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fc-on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fp-audio-time {
+  font-size: 12px;
+  color: var(--fc-on-surface-variant);
+}
+
+.fp-audio-player {
+  width: 100%;
+  height: 44px;
+  outline: none;
+}
+
+.fp-audio-error {
+  padding: 14px 16px;
+  border-radius: var(--fc-radius-block);
+  background-color: var(--fc-error-container);
+  color: var(--fc-on-error-container);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ==========================================================================
  * 图片预览渲染器 (.fp-image-*)
  * ========================================================================== */
 

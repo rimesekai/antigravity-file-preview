@@ -4,7 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve, win32 } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SidecarApp, Response } from 'sidecar_sdk';
-import { closeHtmlServer, mountHtmlTarget, mountImageTarget, mountPdfTarget, mountVideoTarget } from './htmlServer.mjs';
+import {
+  closeHtmlServer,
+  mountAudioTarget,
+  mountHtmlTarget,
+  mountImageTarget,
+  mountPdfTarget,
+  mountVideoTarget,
+} from './htmlServer.mjs';
 import { HttpError, validateFilePath } from './pathSecurity.mjs';
 import { scanWorkspaceFiles } from './workspaceScanner.mjs';
 
@@ -36,7 +43,8 @@ const PLUGIN_VERSION = resolvePluginVersion();
 const MAX_PARSED_READ_BYTES = 60 * 1024 * 1024; // 60 MB：Excel/PPT/Word 等需一次性载入渲染进程内存解析的格式上限
 const MAX_TEXT_READ_BYTES = 80 * 1024 * 1024; // 80 MB：其余由 /api/fs/read 直接读取的文件上限
 const MAX_PDF_BYTES = 1024 * 1024 * 1024; // 1 GB PDF 流式预览安全上限
-const MAX_VIDEO_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB MP4 流式播放安全上限
+const MAX_VIDEO_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB MP4/WebM 流式播放安全上限
+const MAX_AUDIO_BYTES = 1024 * 1024 * 1024; // 1 GB 音频流式播放安全上限
 const MAX_IMAGE_BYTES = 256 * 1024 * 1024; // 256 MB 图片预览安全上限
 
 // 按文件路径缓存静态资源内容，并以 stat.mtimeMs + size 判定失效，兼顾高并发读取性能与开发热构建刷新
@@ -202,6 +210,7 @@ export function registerRoutes(app, options = {}) {
   const mountHtml = options.mountHtml || mountHtmlTarget;
   const mountPdf = options.mountPdf || mountPdfTarget;
   const mountVideo = options.mountVideo || mountVideoTarget;
+  const mountAudio = options.mountAudio || mountAudioTarget;
   const mountImage = options.mountImage || mountImageTarget;
   const revealFile = options.revealFile || revealFileInExplorer;
   const allowedRootsOverride = options.allowedRootsOverride || null;
@@ -359,7 +368,7 @@ export function registerRoutes(app, options = {}) {
     'POST',
   );
 
-  // 挂载 MP4 文件到独立端口 HTTP Range 流式播放服务
+  // 挂载视频文件（.mp4 / .webm）到独立端口 HTTP Range 流式播放服务
   app.api(
     '/api/video/mount',
     withErrorHandling(async (data) => {
@@ -369,11 +378,11 @@ export function registerRoutes(app, options = {}) {
       });
 
       if (info.kind !== 'mp4') {
-        throw new HttpError(415, '仅支持将 .mp4 文件挂载到流式播放服务', 'NOT_VIDEO_FILE');
+        throw new HttpError(415, '仅支持将 .mp4 或 .webm 视频挂载到流式播放服务', 'NOT_VIDEO_FILE');
       }
 
       if (info.size > MAX_VIDEO_BYTES) {
-        throw new HttpError(413, 'MP4 文件体积超过 4GB 预览上限', 'FILE_TOO_LARGE');
+        throw new HttpError(413, '视频文件体积超过 4GB 预览上限', 'FILE_TOO_LARGE');
       }
 
       const mounted = await mountVideo(info.path);
@@ -387,7 +396,35 @@ export function registerRoutes(app, options = {}) {
     'POST',
   );
 
-  // 挂载图片文件（.jpg / .jpeg / .png）到独立端口静态预览服务
+  // 挂载音频文件（.mp3 / .wav / .m4a / .ogg / .flac）到独立端口 HTTP Range 流式播放服务
+  app.api(
+    '/api/audio/mount',
+    withErrorHandling(async (data) => {
+      const info = validateFilePath(data.file, {
+        workspaceUris: data.workspaceUris,
+        allowedRootsOverride,
+      });
+
+      if (info.kind !== 'audio') {
+        throw new HttpError(415, '仅支持将 .mp3、.wav、.m4a、.ogg 或 .flac 音频挂载到流式播放服务', 'NOT_AUDIO_FILE');
+      }
+
+      if (info.size > MAX_AUDIO_BYTES) {
+        throw new HttpError(413, '音频文件体积超过 1GB 预览上限', 'FILE_TOO_LARGE');
+      }
+
+      const mounted = await mountAudio(info.path);
+      return {
+        url: mounted.url,
+        mountId: mounted.mountId,
+        fileName: info.name,
+        size: info.size,
+      };
+    }, ResponseClass),
+    'POST',
+  );
+
+  // 挂载图片文件（.jpg / .jpeg / .png / .webp / .gif / .svg / .bmp / .ico / .avif）到独立端口静态预览服务
   app.api(
     '/api/image/mount',
     withErrorHandling(async (data) => {
@@ -397,7 +434,11 @@ export function registerRoutes(app, options = {}) {
       });
 
       if (info.kind !== 'image') {
-        throw new HttpError(415, '仅支持将 .jpg、.jpeg 或 .png 图片挂载到预览服务', 'NOT_IMAGE_FILE');
+        throw new HttpError(
+          415,
+          '仅支持将 .jpg、.jpeg、.png、.webp、.gif、.svg、.bmp、.ico 或 .avif 图片挂载到预览服务',
+          'NOT_IMAGE_FILE',
+        );
       }
 
       if (info.size > MAX_IMAGE_BYTES) {

@@ -160,8 +160,8 @@ export function createVideoRenderer(): PreviewRenderer {
         loopBtn.textContent = tr('循环', 'Loop');
         if (errorEl) {
           errorEl.textContent = tr(
-            '视频无法播放：可能是编码格式不受当前内置浏览器支持（建议使用 H.264/AAC 编码的 MP4）。',
-            'Unable to play video: codec may not be supported by the built-in webview (H.264/AAC MP4 recommended).',
+            '视频无法播放：可能是编码格式不受当前内置浏览器支持（建议使用 H.264/AAC 的 MP4 或 VP8/VP9 的 WebM）。',
+            'Unable to play video: codec may not be supported by the built-in webview (H.264/AAC MP4 or VP8/VP9 WebM recommended).',
           );
         }
         updateMetaText();
@@ -190,7 +190,7 @@ export function createVideoRenderer(): PreviewRenderer {
 
       const src = mountInfo?.url ?? objectUrl;
       if (!src) {
-        throw new Error(tr('缺少可用的 MP4 视频流地址', 'Missing available MP4 video stream URL.'));
+        throw new Error(tr('缺少可用的视频流地址', 'Missing available video stream URL.'));
       }
 
       if (errorEl) errorEl.hidden = true;

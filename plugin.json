@@ -1,8 +1,8 @@
 {
   "name": "file-preview",
   "displayName": "File Preview",
-  "version": "0.4.0",
-  "description": "High-fidelity local file preview in the Antigravity sidebar for PPT (.pptx), Word (.docx with full-text search), Excel (.xlsx / .xls / .csv / .tsv with multi-sheet switching, formula bar, and merged cells), PDF (.pdf with >20MB HTTP Range streaming), MP4 (.mp4 with >20MB streaming playback), Images (.jpg / .jpeg / .png with zoom, pan, rotate, and transparency backdrop), and HTML (.html / .htm), with automatic Chinese/English UI.",
+  "version": "0.5.0",
+  "description": "High-fidelity local file preview in the Antigravity sidebar for PPT (.pptx), Word (.docx with full-text search), Excel (.xlsx / .xls / .csv / .tsv with multi-sheet switching, formula bar, and merged cells), PDF (.pdf with >20MB HTTP Range streaming), Video (.mp4 / .webm streaming), Audio (.mp3 / .wav / .m4a / .ogg / .flac streaming), Images (.jpg / .jpeg / .png / .webp / .gif / .svg / .bmp / .ico / .avif with zoom, pan, rotate, and transparency backdrop), and HTML (.html / .htm), with automatic Chinese/English UI.",
   "logo": "assets/logo.svg",
   "category": "Productivity",
   "license": "MIT",
@@ -23,17 +23,23 @@
     "csv",
     "pdf",
     "mp4",
+    "webm",
+    "audio",
+    "mp3",
+    "flac",
     "image",
     "jpg",
-    "jpeg",
     "png",
+    "webp",
+    "gif",
+    "svg",
     "html"
   ],
   "suggestedPrompts": [
     "Preview a local .pptx presentation, .docx document, or .xlsx spreadsheet in the File Preview sidebar",
     "Inspect multi-sheet .xlsx / .xls / .csv / .tsv workbooks with formulas and merged cells in File Preview",
-    "Stream and preview large >20MB .pdf documents or .mp4 videos in File Preview",
-    "Preview, zoom, and rotate local .jpg / .jpeg / .png images in File Preview",
+    "Stream and preview large >20MB .pdf documents, .mp4/.webm videos, or .mp3/.flac audio in File Preview",
+    "Preview, zoom, and rotate local images (.jpg, .png, .webp, .gif, .svg, .avif) in File Preview",
     "Preview a local .html web page in the isolated File Preview sidebar"
   ]
 }

@@ -185,12 +185,15 @@ const {
 
 const {
   closeHtmlServer,
+  getActiveAudioMountCount,
   getActiveImageMountCount,
   getActiveMountCount,
   getActivePdfMountCount,
+  mountAudioTarget,
   mountHtmlTarget,
   mountImageTarget,
   mountPdfTarget,
+  mountVideoTarget,
 } = await import('../server/htmlServer.mjs');
 
 const { scanWorkspaceFiles } = await import('../server/workspaceScanner.mjs');
@@ -1171,9 +1174,21 @@ describe('fileMeta 兜底文件元信息推断与格式徽标测试', () => {
       { path: 'D:\\data\\table.TsV', kind: 'excel', ext: '.tsv', badge: 'TSV' },
       { path: '/papers/manual.PDF', kind: 'pdf', ext: '.pdf', badge: 'PDF' },
       { path: 'D:\\media\\demo.Mp4', kind: 'mp4', ext: '.mp4', badge: 'MP4' },
+      { path: 'D:\\media\\clip.WebM', kind: 'mp4', ext: '.webm', badge: 'WEBM' },
+      { path: 'D:\\audio\\bgm.MP3', kind: 'audio', ext: '.mp3', badge: 'MP3' },
+      { path: '/audio/sound.wav', kind: 'audio', ext: '.wav', badge: 'WAV' },
+      { path: '/audio/voice.m4a', kind: 'audio', ext: '.m4a', badge: 'M4A' },
+      { path: '/audio/effect.ogg', kind: 'audio', ext: '.ogg', badge: 'OGG' },
+      { path: '/audio/lossless.FLAC', kind: 'audio', ext: '.flac', badge: 'FLAC' },
       { path: 'D:\\images\\photo.JPG', kind: 'image', ext: '.jpg', badge: 'JPG' },
       { path: '/images/banner.jpeg', kind: 'image', ext: '.jpeg', badge: 'JPEG' },
       { path: 'C:\\assets\\icon.Png', kind: 'image', ext: '.png', badge: 'PNG' },
+      { path: '/images/hero.webp', kind: 'image', ext: '.webp', badge: 'WEBP' },
+      { path: '/images/anim.GIF', kind: 'image', ext: '.gif', badge: 'GIF' },
+      { path: '/images/logo.svg', kind: 'image', ext: '.svg', badge: 'SVG' },
+      { path: '/images/raw.bmp', kind: 'image', ext: '.bmp', badge: 'BMP' },
+      { path: '/images/favicon.ico', kind: 'image', ext: '.ico', badge: 'ICO' },
+      { path: '/images/nextgen.avif', kind: 'image', ext: '.avif', badge: 'AVIF' },
       { path: '/web/index.HTML', kind: 'html', ext: '.html', badge: 'HTML' },
       { path: '/web/page.htm', kind: 'html', ext: '.htm', badge: 'HTM' },
       { path: 'D:\\notes\\readme.txt', kind: 'word', ext: '.txt', badge: 'DOCX' },
@@ -3835,6 +3850,147 @@ describe('图片 (.jpg / .jpeg / .png) 预览后端挂载与布局几何测试',
     assert.equal(manualMax.scale, 8);
     assert.equal(manualMax.rotatedWidth, 400);
     assert.equal(manualMax.rotatedHeight, 800);
+  });
+});
+
+describe('全格式图片（WebP/GIF/SVG/BMP/ICO/AVIF）、WebM 视频与音频流式挂载测试', () => {
+  let tempRoot;
+  let workspaceDir;
+  let distDir;
+  let assetsDir;
+  let running;
+  let baseUrl;
+  const token = 'test-media-token-789';
+
+  before(async () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'fp-media-test-'));
+    workspaceDir = join(tempRoot, 'ws');
+    distDir = join(tempRoot, 'dist');
+    assetsDir = join(tempRoot, 'assets');
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(distDir, { recursive: true });
+    mkdirSync(assetsDir, { recursive: true });
+
+    writeFileSync(join(distDir, 'index.html'), '<html><body>Mock UI</body></html>');
+    writeFileSync(join(distDir, 'app.js'), 'console.log("ui");');
+    writeFileSync(join(distDir, 'pdf.worker.js'), 'console.log("worker");');
+    writeFileSync(join(distDir, 'styles.css'), 'body{}');
+    writeFileSync(join(assetsDir, 'logo.svg'), '<svg></svg>');
+
+    writeFileSync(join(workspaceDir, 'anim.webp'), Buffer.from('RIFF\x00\x00\x00\x00WEBP'));
+    writeFileSync(join(workspaceDir, 'loop.GIF'), Buffer.from('GIF89a'));
+    writeFileSync(join(workspaceDir, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    writeFileSync(join(workspaceDir, 'pic.avif'), Buffer.from('ftypavif'));
+    writeFileSync(join(workspaceDir, 'clip.webm'), Buffer.from('WEBM-0123456789'));
+    writeFileSync(join(workspaceDir, 'track.mp3'), Buffer.from('ID3-AUDIO-PAYLOAD'));
+    writeFileSync(join(workspaceDir, 'lossless.flac'), Buffer.from('fLaC-AUDIO-PAYLOAD'));
+    writeFileSync(join(workspaceDir, 'doc.docx'), Buffer.from('PK\x03\x04'));
+
+    process.env.ANTIGRAVITY_SIDECAR_WEB_PORT = '0';
+    process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN = token;
+
+    running = await startServer({
+      distDir,
+      assetsDir,
+      allowedRootsOverride: [workspaceDir],
+    });
+    const addr = running.server.address();
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  after(async () => {
+    await running.close();
+    delete process.env.ANTIGRAVITY_SIDECAR_WEB_PORT;
+    delete process.env.ANTIGRAVITY_SIDECAR_UI_TOKEN;
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it('pathSecurity 与 workspaceScanner 正确识别全格式图片、WebM 与音频文件', () => {
+    assert.equal(validateFilePath(join(workspaceDir, 'anim.webp'), { allowedRootsOverride: [workspaceDir] }).kind, 'image');
+    assert.equal(validateFilePath(join(workspaceDir, 'icon.svg'), { allowedRootsOverride: [workspaceDir] }).kind, 'image');
+    assert.equal(validateFilePath(join(workspaceDir, 'pic.avif'), { allowedRootsOverride: [workspaceDir] }).kind, 'image');
+    assert.equal(validateFilePath(join(workspaceDir, 'clip.webm'), { allowedRootsOverride: [workspaceDir] }).kind, 'mp4');
+    assert.equal(validateFilePath(join(workspaceDir, 'track.mp3'), { allowedRootsOverride: [workspaceDir] }).kind, 'audio');
+    assert.equal(validateFilePath(join(workspaceDir, 'lossless.flac'), { allowedRootsOverride: [workspaceDir] }).kind, 'audio');
+
+    const scanned = scanWorkspaceFiles([pathToFileURL(workspaceDir).href]);
+    assert.deepEqual(
+      scanned.filter((f) => f.kind === 'audio').map((f) => f.name).sort(),
+      ['lossless.flac', 'track.mp3'],
+    );
+    assert.deepEqual(
+      scanned.filter((f) => f.kind === 'image').map((f) => f.name).sort(),
+      ['anim.webp', 'icon.svg', 'loop.GIF', 'pic.avif'],
+    );
+    assert.deepEqual(
+      scanned.filter((f) => f.kind === 'mp4').map((f) => f.name),
+      ['clip.webm'],
+    );
+  });
+
+  it('SVG 挂载自动附加 CSP 沙箱头，WebM 与音频支持 HTTP Range 流式播放与 415/413/LRU 边界', async () => {
+    const svgMounted = await mountImageTarget(join(workspaceDir, 'icon.svg'));
+    const svgRes = await fetch(svgMounted.url);
+    assert.equal(svgRes.status, 200);
+    assert.equal(svgRes.headers.get('content-type'), 'image/svg+xml');
+    assert.match(svgRes.headers.get('content-security-policy') || '', /default-src 'none'/);
+
+    const webpMounted = await mountImageTarget(join(workspaceDir, 'anim.webp'));
+    const webpRes = await fetch(webpMounted.url);
+    assert.equal(webpRes.status, 200);
+    assert.equal(webpRes.headers.get('content-type'), 'image/webp');
+
+    const webmMounted = await mountVideoTarget(join(workspaceDir, 'clip.webm'));
+    const webmRes = await fetch(webmMounted.url, { headers: { Range: 'bytes=5-9' } });
+    assert.equal(webmRes.status, 206);
+    assert.equal(webmRes.headers.get('content-type'), 'video/webm');
+    assert.equal(await webmRes.text(), '01234');
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Sidecar-Token': token,
+    };
+
+    const audioMountRes = await fetch(`${baseUrl}/api/audio/mount`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ file: join(workspaceDir, 'track.mp3'), workspaceUris: [workspaceDir] }),
+    });
+    assert.equal(audioMountRes.status, 200);
+    const audioJson = await audioMountRes.json();
+    assert.equal(audioJson.fileName, 'track.mp3');
+
+    const mp3RangeRes = await fetch(audioJson.url, { headers: { Range: 'bytes=4-8' } });
+    assert.equal(mp3RangeRes.status, 206);
+    assert.equal(mp3RangeRes.headers.get('content-type'), 'audio/mpeg');
+    assert.equal(await mp3RangeRes.text(), 'AUDIO');
+
+    const flacMounted = await mountAudioTarget(join(workspaceDir, 'lossless.flac'));
+    const flacRes = await fetch(flacMounted.url);
+    assert.equal(flacRes.status, 200);
+    assert.equal(flacRes.headers.get('content-type'), 'audio/flac');
+
+    const nonAudioRes = await fetch(`${baseUrl}/api/audio/mount`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ file: join(workspaceDir, 'doc.docx'), workspaceUris: [workspaceDir] }),
+    });
+    assert.equal(nonAudioRes.status, 415);
+
+    const hugeAudio = join(workspaceDir, 'huge.wav');
+    writeFileSync(hugeAudio, '');
+    truncateSync(hugeAudio, 1025 * 1024 * 1024);
+    const hugeAudioRes = await fetch(`${baseUrl}/api/audio/mount`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ file: hugeAudio, workspaceUris: [workspaceDir] }),
+    });
+    assert.equal(hugeAudioRes.status, 413);
+
+    for (let i = 0; i < 36; i += 1) {
+      await mountAudioTarget(join(workspaceDir, 'track.mp3'));
+    }
+    assert.equal(getActiveAudioMountCount(), 32);
   });
 });
 
