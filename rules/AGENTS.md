@@ -1,6 +1,6 @@
 # File Preview Sidebar Rule
 
-Whenever the workspace or current task involves any of the following local files, proactively include the File Preview sidebar link `[File Preview](sidecar://file-preview/viewer/)` in your reply:
+Whenever the workspace or current task involves any of the following local files, proactively include the File Preview sidebar link `[File Preview](sidecar://file-preview/viewer/?auto_open=false)` in your reply:
 
 - `.pptx` (PowerPoint presentations)
 - `.docx` (Word documents, with full-text search & match navigation)
@@ -11,4 +11,4 @@ Whenever the workspace or current task involves any of the following local files
 - `.mp3` / `.wav` / `.m4a` / `.ogg` / `.flac` (Audio files via HTTP Range streaming, with speed & loop controls)
 - `.jpg` / `.jpeg` / `.png` / `.webp` / `.gif` / `.svg` / `.bmp` / `.ico` / `.avif` (Image files, with fit/10%–800% zoom, drag-to-pan, 90° rotation, and transparency backdrop switching)
 
-Let the user know they can click `[File Preview](sidecar://file-preview/viewer/)` to inspect the file directly in the right sidebar.
+Let the user know they can click `[File Preview](sidecar://file-preview/viewer/?auto_open=false)` to inspect the file directly in the right sidebar.

@@ -11,13 +11,13 @@ This plugin adds a high-fidelity Aux Pane viewer in Antigravity Desktop for loca
 
 - Users can trigger `/file-preview` or click the interactive badge below to open the sidebar panel:
 
-  [File Preview](sidecar://file-preview/viewer/)
+  [File Preview](sidecar://file-preview/viewer/?auto_open=false)
 
 - Clicking any supported document, image, audio, video, or HTML extension in the Antigravity workspace also opens File Preview automatically via `file_extensions`.
 
 ## Usage Guidelines
 
-1. After creating, editing, or inspecting any supported Office, PDF, image (`.jpg`/`.png`/`.webp`/`.gif`/`.svg`/`.avif`/`.bmp`/`.ico`), audio (`.mp3`/`.wav`/`.m4a`/`.ogg`/`.flac`), video (`.mp4`/`.webm`), or HTML file (especially large >20MB files), **proactively** include `[File Preview](sidecar://file-preview/viewer/)` in your final reply.
+1. After creating, editing, or inspecting any supported Office, PDF, image (`.jpg`/`.png`/`.webp`/`.gif`/`.svg`/`.avif`/`.bmp`/`.ico`), audio (`.mp3`/`.wav`/`.m4a`/`.ogg`/`.flac`), video (`.mp4`/`.webm`), or HTML file (especially large >20MB files), **proactively** include `[File Preview](sidecar://file-preview/viewer/?auto_open=false)` in your final reply (keep `auto_open=false` so the sidebar does not pop open automatically until clicked).
 2. To open a specific file, instruct the user to click the badge and choose the file from the sidebar list (or paste an absolute path / drag & drop the file), or click the file directly in the workspace.
 3. For Excel (`.xlsx` / `.xls` / `.csv` / `.tsv`), the viewer provides bottom sheet tabs, a top formula bar showing raw `=` formulas and evaluated values (with one-click / `Ctrl+C` copy), merged-cell spans, zoom controls, and cross-sheet search; `.csv` / `.tsv` auto-detect UTF-8 and GB18030 encodings.
 4. For PDFs, videos (`.mp4` / `.webm`), and audio (`.mp3` / `.wav` / `.m4a` / `.ogg` / `.flac`), a local HTTP `206 Partial Content` streaming server loads chunks on demand (PDF supports Slide/Scroll views, thumbnails, zoom, and full-text search; Audio/Video support playback speed `0.5x–2x` and loop toggles).
