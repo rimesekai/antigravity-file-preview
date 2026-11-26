@@ -19,6 +19,7 @@ import {
   collectDocxPaginationMeta,
   normalizeDocxAutoLineHeight,
   paginateOverflowDocxSections,
+  sanitizeDocxPageBackground,
   waitForDocxMediaReady,
   type DocxHeaderFooterTemplates,
 } from '../utils/docxPaginator';
@@ -601,6 +602,7 @@ export function createWordRenderer(): PreviewRenderer {
       }
 
       const paginationMeta = collectDocxPaginationMeta(doc);
+      sanitizeDocxPageBackground(doc);
       const sectionPageConfigs = preprocessDocxPageFields(doc);
       await applyHeaderFooterFrameAlignment(doc);
       if (destroyed || gen !== loadGeneration) {

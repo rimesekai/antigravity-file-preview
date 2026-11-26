@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v0.5.2 (2026-11-26)
+
+### 修复与优化 / Fixes & Improvements
+- **修复 Word（`.docx`）页面底色（`<w:background>`）在预览中被强制白底覆盖的问题**：
+  - **解除强制白底覆写（`src/renderers/renderers.css`）**：移除 `.fp-word-stage .docx-wrapper > section.docx` 上 `background` 与 `color` 的 `!important` 覆盖，使 `docx-preview` 解析 `<w:background>` 写入的内联页面底色能够正常呈现，同时保持无背景文档的白纸效果；
+  - **页面背景边界兼容（`src/utils/docxPaginator.ts`、`src/renderers/wordRenderer.ts`）**：新增 `sanitizeDocxPageBackground(doc)`，修正 `<w:background w:color="auto"/>` 被 `docx-preview` 误映射为纯黑的问题，并支持从子元素 `<v:background fillcolor="...">` 补齐底色；
+  - **测试覆盖**：在 `tests/server.test.mjs` 新增页面背景样式规则与 `sanitizeDocxPageBackground` 单元测试，全量 19 个套件共 62 项测试全部通过。
+
 ## v0.5.1 (2026-11-26)
 
 ### 修复与优化 / Fixes & Improvements

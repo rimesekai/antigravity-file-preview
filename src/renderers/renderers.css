@@ -52,8 +52,8 @@
 }
 
 .fp-word-stage .docx-wrapper > section.docx {
-  background: #ffffff !important;
-  color: #111827 !important;
+  background-color: #ffffff;
+  color: #111827;
   box-shadow: var(--fc-shadow-e1) !important;
   border-radius: 6px;
   margin-bottom: 18px !important;

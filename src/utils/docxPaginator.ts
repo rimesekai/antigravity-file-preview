@@ -234,6 +234,90 @@ function isShortCaptionLikeParagraph(
   return metric.height <= Math.min(120, maxArticleHeightPx * 0.18);
 }
 
+function getLocalXmlName(node: { localName?: string; tagName?: string }): string {
+  if (node.localName) return node.localName;
+  const tag = node.tagName ?? '';
+  const idx = tag.indexOf(':');
+  return idx >= 0 ? tag.slice(idx + 1) : tag;
+}
+
+function getXmlAttr(
+  el: { getAttribute?: (name: string) => string | null; attributes?: ArrayLike<{ name: string; value: string }> },
+  names: string[],
+): string | null {
+  for (const name of names) {
+    const val = el.getAttribute?.(name);
+    if (val !== null && val !== undefined && val !== '') {
+      return val;
+    }
+  }
+  if (el.attributes) {
+    for (let i = 0; i < el.attributes.length; i += 1) {
+      const attr = el.attributes[i];
+      if (!attr) continue;
+      const local = attr.name.includes(':') ? attr.name.split(':').pop() : attr.name;
+      if (local && names.includes(local) && attr.value !== '') {
+        return attr.value;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeVmlColor(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'auto' || trimmed.toLowerCase() === 'none') {
+    return null;
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(trimmed)) {
+    return `#${trimmed}`;
+  }
+  return trimmed;
+}
+
+/**
+ * 修正并补全 docx-preview 解析 <w:background> 时的页面背景色：
+ * 1. 当 <w:background w:color="auto"/> 时，docx-preview 会错误将其映射为 'black'，此处清理以保持白纸底色；
+ * 2. 若 <w:background> 仅通过子元素 <v:background fillcolor="..."/> 指定底色，则补齐到 body.cssStyle['background-color']。
+ */
+export function sanitizeDocxPageBackground(doc: any): void {
+  const body = doc?.documentPart?.body;
+  if (!body || typeof body !== 'object') return;
+
+  const rootEl = doc?.documentPart?._xmlDocument?.firstElementChild;
+  if (!rootEl || !rootEl.children) return;
+
+  let bgEl: any = null;
+  for (const child of Array.from(rootEl.children as ArrayLike<any>)) {
+    if (getLocalXmlName(child) === 'background') {
+      bgEl = child;
+      break;
+    }
+  }
+  if (!bgEl) return;
+
+  if (!body.cssStyle || typeof body.cssStyle !== 'object') {
+    body.cssStyle = {};
+  }
+
+  const wColor = getXmlAttr(bgEl, ['w:color', 'color']);
+  if (wColor?.trim().toLowerCase() === 'auto' && body.cssStyle['background-color'] === 'black') {
+    delete body.cssStyle['background-color'];
+  }
+
+  if (!body.cssStyle['background-color'] && bgEl.children) {
+    for (const child of Array.from(bgEl.children as ArrayLike<any>)) {
+      if (getLocalXmlName(child) !== 'background') continue;
+      const fillColor = normalizeVmlColor(getXmlAttr(child, ['fillcolor']));
+      if (fillColor) {
+        body.cssStyle['background-color'] = fillColor;
+        break;
+      }
+    }
+  }
+}
+
 /**
  * 修正 docx-preview 将 Word <w:spacing w:lineRule="auto"/> 直接映射为 CSS 无单位 line-height 造成的行高偏矮问题：
  * Word 中单倍行距 (240) 约为字号的 1.3 倍自然行框高度，而在 CSS 中无单位 line-height 直接乘以 font-size。

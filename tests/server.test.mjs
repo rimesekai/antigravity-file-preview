@@ -4076,6 +4076,84 @@ describe('全格式图片（WebP/GIF/SVG/BMP/ICO/AVIF）、WebM 视频与音频�
   });
 });
 
+describe('Word 页面背景色 (<w:background>) 保留与边界处理测试', () => {
+  it('renderers.css 不再使用 !important 强行覆写 section.docx 页面底色', () => {
+    const cssText = readFileSync(new URL('../src/renderers/renderers.css', import.meta.url), 'utf8');
+    const match = /\.fp-word-stage\s+\.docx-wrapper\s*>\s*section\.docx\s*\{([^}]*)\}/.exec(cssText);
+    assert.ok(match, '应存在 .fp-word-stage .docx-wrapper > section.docx 样式规则');
+    const ruleBody = match[1];
+    assert.equal(/background(?:-color)?\s*:[^;]*!important/i.test(ruleBody), false);
+    assert.match(ruleBody, /background-color\s*:\s*#ffffff\s*;/i);
+  });
+
+  it('sanitizeDocxPageBackground 保留显式底色、修正 auto 黑底并支持 <v:background> 回退', async () => {
+    const { sanitizeDocxPageBackground } = await import('../src/utils/docxPaginator.ts');
+
+    const explicitDoc = {
+      documentPart: {
+        body: { cssStyle: { 'background-color': '#FAF6EE' } },
+        _xmlDocument: {
+          firstElementChild: {
+            children: [
+              {
+                localName: 'background',
+                getAttribute: (name) => (name === 'w:color' ? 'FAF6EE' : null),
+                children: [],
+              },
+            ],
+          },
+        },
+      },
+    };
+    sanitizeDocxPageBackground(explicitDoc);
+    assert.equal(explicitDoc.documentPart.body.cssStyle['background-color'], '#FAF6EE');
+
+    const autoDoc = {
+      documentPart: {
+        body: { cssStyle: { 'background-color': 'black' } },
+        _xmlDocument: {
+          firstElementChild: {
+            children: [
+              {
+                localName: 'background',
+                getAttribute: (name) => (name === 'w:color' ? 'auto' : null),
+                children: [],
+              },
+            ],
+          },
+        },
+      },
+    };
+    sanitizeDocxPageBackground(autoDoc);
+    assert.equal(autoDoc.documentPart.body.cssStyle['background-color'], undefined);
+
+    const vmlDoc = {
+      documentPart: {
+        body: { cssStyle: {} },
+        _xmlDocument: {
+          firstElementChild: {
+            children: [
+              {
+                localName: 'background',
+                getAttribute: () => null,
+                children: [
+                  {
+                    localName: 'background',
+                    getAttribute: (name) => (name === 'fillcolor' ? 'FAF6EE' : null),
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    };
+    sanitizeDocxPageBackground(vmlDoc);
+    assert.equal(vmlDoc.documentPart.body.cssStyle['background-color'], '#FAF6EE');
+  });
+});
+
+
 
 
 
