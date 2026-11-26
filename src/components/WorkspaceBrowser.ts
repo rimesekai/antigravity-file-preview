@@ -57,6 +57,21 @@ function formatModifiedTime(mtimeMs: number): string {
   return `${month}-${day} ${hour}:${minute}`;
 }
 
+function getWorkspaceRootLabel(workspaceRoot: string): string {
+  const trimmed = workspaceRoot.replace(/[\\/]+$/, '');
+  if (!trimmed) return '';
+  const parts = trimmed.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
+function getDisplayRelPath(file: WorkspaceFileItem, hasMultipleRoots: boolean): string {
+  if (!hasMultipleRoots || !file.workspaceRoot) {
+    return file.relPath;
+  }
+  const rootLabel = getWorkspaceRootLabel(file.workspaceRoot);
+  return rootLabel ? `${rootLabel}/${file.relPath}` : file.relPath;
+}
+
 function getKindShortLabel(kind: PreviewKind, ext: string): string {
   if (kind === 'ppt') return 'PPT';
   if (kind === 'word') return 'DOC';
@@ -469,12 +484,18 @@ export function createWorkspaceBrowser(
       return;
     }
 
+    const distinctRoots = new Set(
+      latestState.files.map((file) => file.workspaceRoot).filter(Boolean),
+    );
+    const hasMultipleRoots = distinctRoots.size > 1;
+
     const filtered = latestState.files.filter((file) => {
       if (currentFilter !== 'all' && file.kind !== currentFilter) {
         return false;
       }
       if (currentKeyword) {
-        const hay = `${file.name} ${file.relPath}`.toLowerCase();
+        const displayPath = getDisplayRelPath(file, hasMultipleRoots);
+        const hay = `${file.name} ${displayPath}`.toLowerCase();
         if (!hay.includes(currentKeyword)) {
           return false;
         }
@@ -537,9 +558,10 @@ export function createWorkspaceBrowser(
       const metaEl = document.createElement('div');
       metaEl.className = 'fp-file-meta fc-tabular';
       const timeText = formatModifiedTime(file.mtimeMs);
+      const displayRelPath = getDisplayRelPath(file, hasMultipleRoots);
       metaEl.textContent = timeText
-        ? `${file.relPath} · ${formatBytes(file.size)} · ${timeText}`
-        : `${file.relPath} · ${formatBytes(file.size)}`;
+        ? `${displayRelPath} · ${formatBytes(file.size)} · ${timeText}`
+        : `${displayRelPath} · ${formatBytes(file.size)}`;
 
       info.append(nameRow, metaEl);
       itemBtn.append(glyphWell, info);

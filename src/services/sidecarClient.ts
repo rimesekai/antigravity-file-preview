@@ -64,30 +64,45 @@ function getUrlToken(): string | null {
 
 /**
  * 安全获取当前会话工作区 URI 列表；非 plugin:// 环境或异常时返回空数组而不抛出错误。
- * 当获取为空或超时，不永久缓存空数组，避免首次启动宿主 bridge 延迟导致后续无法获取工作区。
+ * 每次优先向宿主 bridge 实时拉取最新工作区列表，避免新增/切换多工作区文件夹后仍命中旧缓存；
+ * 仅在 bridge 调用超时或异常时回退到最近一次有效缓存。
  */
 export async function getWorkspaceUrisSafe(): Promise<string[]> {
-  if (cachedWorkspaceUris !== null && cachedWorkspaceUris.length > 0) {
-    return [...cachedWorkspaceUris];
-  }
-
   const bridge = getSidecarBridge();
   if (!bridge || typeof bridge.getWorkspaceUris !== 'function') {
-    return [];
+    return cachedWorkspaceUris ? [...cachedWorkspaceUris] : [];
   }
 
+  let timedOut = false;
+  let timerId: number | undefined;
   try {
     const timeoutFallback = new Promise<string[]>((resolve) => {
-      window.setTimeout(() => resolve([]), 1200);
+      timerId = window.setTimeout(() => {
+        timedOut = true;
+        resolve([]);
+      }, 1200);
     });
     const uris = await Promise.race([bridge.getWorkspaceUris(), timeoutFallback]);
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+    }
+
+    if (timedOut) {
+      return cachedWorkspaceUris ? [...cachedWorkspaceUris] : [];
+    }
+
     if (Array.isArray(uris) && uris.length > 0) {
       cachedWorkspaceUris = [...uris];
       return [...uris];
     }
-    return Array.isArray(uris) ? [...uris] : [];
-  } catch {
+
+    cachedWorkspaceUris = null;
     return [];
+  } catch {
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+    }
+    return cachedWorkspaceUris ? [...cachedWorkspaceUris] : [];
   }
 }
 
@@ -275,10 +290,17 @@ export async function readFileText(file: string): Promise<string> {
 
 /**
  * 扫描当前工作区中所有可预览文档。
- * 支持传入 currentFile 当前打开的文件路径，以便在无显式工作区时服务端回退扫描其所在目录。
+ * 支持传入 currentFile 当前打开的文件路径，以便在无显式工作区时服务端回退扫描其所在目录；
+ * 当宿主工作区变更事件直接推送了最新列表时，可通过 explicitWorkspaceUris 透传避免竞态。
  */
-export async function listWorkspaceFiles(currentFile?: string | null): Promise<WorkspaceFileItem[]> {
-  const workspaceUris = await getWorkspaceUrisSafe();
+export async function listWorkspaceFiles(
+  currentFile?: string | null,
+  explicitWorkspaceUris?: string[] | null,
+): Promise<WorkspaceFileItem[]> {
+  const workspaceUris =
+    Array.isArray(explicitWorkspaceUris) && explicitWorkspaceUris.length > 0
+      ? [...explicitWorkspaceUris]
+      : await getWorkspaceUrisSafe();
   const body: Record<string, unknown> = {
     workspaceUris,
   };

@@ -681,6 +681,88 @@ describe('workspaceScanner 工作区扫描测试', () => {
       }
     }
   });
+
+  it('跳过 _work/_tmp/_cache/__pycache__ 等中间渲染目录，且大量图片不挤占 PDF 等文档配额', () => {
+    const isolatedRoot = mkdtempSync(join(tmpdir(), 'fp-scan-balance-'));
+    try {
+      mkdirSync(join(isolatedRoot, '_work', 'render', 'slides'), { recursive: true });
+      mkdirSync(join(isolatedRoot, '_tmp'), { recursive: true });
+      mkdirSync(join(isolatedRoot, '__pycache__'), { recursive: true });
+      mkdirSync(join(isolatedRoot, 'images'), { recursive: true });
+
+      const pdfPath = join(isolatedRoot, 'lecture.pdf');
+      writeFileSync(pdfPath, '%PDF-1.7');
+      const oldTime = new Date(Date.now() - 3600_000);
+      utimesSync(pdfPath, oldTime, oldTime);
+
+      // 中间工作目录里的分页渲染图应被彻底跳过
+      writeFileSync(join(isolatedRoot, '_work', 'render', 'slides', '幻灯片1.PNG'), 'png');
+      writeFileSync(join(isolatedRoot, '_tmp', 'preview.png'), 'png');
+      writeFileSync(join(isolatedRoot, '__pycache__', 'cache.html'), '<p>cache</p>');
+
+      // 合法目录里有 15 张更新时间更新的图片，limit=10 时仍需保底保留 lecture.pdf
+      const now = Date.now();
+      for (let i = 1; i <= 15; i += 1) {
+        const imgPath = join(isolatedRoot, 'images', `fig-${i}.png`);
+        writeFileSync(imgPath, 'png');
+        const imgTime = new Date(now + i * 1000);
+        utimesSync(imgPath, imgTime, imgTime);
+      }
+
+      const scanned = scanWorkspaceFiles([pathToFileURL(isolatedRoot).href], { limit: 10 });
+      assert.equal(scanned.length, 10);
+      assert.equal(scanned.some((f) => f.relPath.startsWith('_work/')), false);
+      assert.equal(scanned.some((f) => f.relPath.startsWith('_tmp/')), false);
+      assert.equal(scanned.some((f) => f.relPath.startsWith('__pycache__/')), false);
+
+      const pdfItem = scanned.find((f) => f.relPath === 'lecture.pdf');
+      assert.ok(pdfItem, '即使存在大量更新时间的图片，PDF 文档仍应保留在扫描结果中');
+      assert.equal(pdfItem.kind, 'pdf');
+    } finally {
+      rmSync(isolatedRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('多文件夹工作区按根目录均衡扫描，前序目录文件较多或较新时不挤占后续目录', () => {
+    const multiRoot = mkdtempSync(join(tmpdir(), 'fp-scan-multi-'));
+    try {
+      const rootA = join(multiRoot, 'folderA');
+      const rootB = join(multiRoot, 'folderB');
+      mkdirSync(rootA, { recursive: true });
+      mkdirSync(rootB, { recursive: true });
+
+      const now = Date.now();
+      for (let i = 1; i <= 15; i += 1) {
+        const p = join(rootA, `a-${i}.pdf`);
+        writeFileSync(p, '%PDF-1.7');
+        const t = new Date(now + i * 1000);
+        utimesSync(p, t, t);
+      }
+
+      const older = new Date(now - 7200_000);
+      const bPdf = join(rootB, 'b-guide.pdf');
+      const bDocx = join(rootB, 'b-notes.docx');
+      writeFileSync(bPdf, '%PDF-1.7');
+      writeFileSync(bDocx, 'docx');
+      utimesSync(bPdf, older, older);
+      utimesSync(bDocx, older, older);
+
+      const scanned = scanWorkspaceFiles(
+        [pathToFileURL(rootA).href, pathToFileURL(rootB).href],
+        { limit: 10 },
+      );
+
+      assert.equal(scanned.length, 10);
+      const fromA = scanned.filter((f) => f.workspaceRoot.toLowerCase() === rootA.toLowerCase());
+      const fromB = scanned.filter((f) => f.workspaceRoot.toLowerCase() === rootB.toLowerCase());
+      assert.ok(fromA.length > 0, '应包含第一个工作区文件夹中的文档');
+      assert.equal(fromB.length, 2, '第二个工作区文件夹中的旧文档也应完整保留');
+      assert.ok(fromB.some((f) => f.relPath === 'b-guide.pdf'));
+      assert.ok(fromB.some((f) => f.relPath === 'b-notes.docx'));
+    } finally {
+      rmSync(multiRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('SidecarApp HTTP 路由集成测试', () => {

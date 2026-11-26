@@ -7,10 +7,20 @@ const SKIP_DIRS = new Set([
   '.git',
   '.svn',
   '.venv',
+  'venv',
   'dist',
   'build',
   '.next',
   '.system_generated',
+  '__pycache__',
+  'coverage',
+  '_work',
+  '_tmp',
+  '_temp',
+  '_cache',
+  '_build',
+  '_out',
+  '_output',
 ]);
 
 const SUPPORTED_EXTS = new Map([
@@ -52,6 +62,106 @@ const HARD_COLLECT_CAP = 2000;
  */
 function isIgnoredTempFile(name) {
   return name.startsWith('~$') || name.startsWith('.~') || name.startsWith('._');
+}
+
+/**
+ * 按文档类型分配保底配额并填充剩余名额（内部假定 items 已按 mtimeMs 降序排列）。
+ * @template {{ kind: string, mtimeMs: number }} T
+ * @param {T[]} sortedItems
+ * @param {number} limit
+ * @returns {T[]}
+ */
+function selectByKindQuota(sortedItems, limit) {
+  if (limit <= 0) return [];
+  if (sortedItems.length <= limit) return sortedItems;
+
+  const byKind = new Map();
+  for (const item of sortedItems) {
+    let list = byKind.get(item.kind);
+    if (!list) {
+      list = [];
+      byKind.set(item.kind, list);
+    }
+    list.push(item);
+  }
+
+  const baseQuota = Math.floor(limit / byKind.size);
+  if (baseQuota <= 0) {
+    return sortedItems.slice(0, limit);
+  }
+
+  const pickedSet = new Set();
+  const selected = [];
+  for (const list of byKind.values()) {
+    const takeCount = Math.min(list.length, baseQuota);
+    for (let i = 0; i < takeCount; i += 1) {
+      pickedSet.add(list[i]);
+      selected.push(list[i]);
+    }
+  }
+
+  if (selected.length < limit) {
+    for (const item of sortedItems) {
+      if (selected.length >= limit) break;
+      if (!pickedSet.has(item)) {
+        selected.push(item);
+      }
+    }
+  }
+
+  return selected;
+}
+
+/**
+ * 当候选文件数超过 limit 时，同时按工作区根目录与文档类型分配保底配额，
+ * 避免单个多文件文件夹或大量图片把其他工作区文件夹和 PDF/Word/PPT 挤出返回列表。
+ * @template {{ kind: string, mtimeMs: number, workspaceRoot: string }} T
+ * @param {T[]} sortedResults 已按 mtimeMs 降序排列的候选文件列表
+ * @param {number} limit
+ * @returns {T[]}
+ */
+function selectBalancedResults(sortedResults, limit) {
+  if (limit <= 0) return [];
+  if (sortedResults.length <= limit) return sortedResults;
+
+  const byRoot = new Map();
+  for (const item of sortedResults) {
+    const rootKey =
+      process.platform === 'win32' ? item.workspaceRoot.toLowerCase() : item.workspaceRoot;
+    let list = byRoot.get(rootKey);
+    if (!list) {
+      list = [];
+      byRoot.set(rootKey, list);
+    }
+    list.push(item);
+  }
+
+  let selected;
+  if (byRoot.size <= 1) {
+    selected = selectByKindQuota(sortedResults, limit);
+  } else {
+    const rootQuota = Math.floor(limit / byRoot.size);
+    if (rootQuota <= 0) {
+      selected = selectByKindQuota(sortedResults, limit);
+    } else {
+      const pickedSet = new Set();
+      selected = [];
+      for (const rootItems of byRoot.values()) {
+        for (const item of selectByKindQuota(rootItems, rootQuota)) {
+          pickedSet.add(item);
+          selected.push(item);
+        }
+      }
+
+      if (selected.length < limit) {
+        const remaining = sortedResults.filter((item) => !pickedSet.has(item));
+        selected.push(...selectByKindQuota(remaining, limit - selected.length));
+      }
+    }
+  }
+
+  selected.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return selected;
 }
 
 /**
@@ -137,28 +247,66 @@ export function scanWorkspaceFiles(workspaceUris = [], options = {}) {
   const results = [];
   const seenFiles = new Set();
   const visitedDirs = new Set();
+  const rootStates = [];
 
-  for (const rootDir of uniqueRoots) {
-    walkDirectory(rootDir, rootDir, 0);
-    if (results.length >= HARD_COLLECT_CAP) break;
-  }
-
-  results.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return results.slice(0, limit);
-
-  /**
-   * @param {string} currentDir
-   * @param {string} rootDir
-   * @param {number} depth
-   */
-  function walkDirectory(currentDir, rootDir, depth) {
-    if (results.length >= HARD_COLLECT_CAP) return;
+  function enqueueDirectory(state, currentDir, depth) {
     if (isForbiddenSystemPath(currentDir)) return;
-
     const dirKey = process.platform === 'win32' ? currentDir.toLowerCase() : currentDir;
     if (visitedDirs.has(dirKey)) return;
     visitedDirs.add(dirKey);
+    state.queue.push({ currentDir, depth });
+  }
 
+  for (const rootDir of uniqueRoots) {
+    const state = {
+      rootDir,
+      queue: [],
+      head: 0,
+      collected: 0,
+    };
+    enqueueDirectory(state, rootDir, 0);
+    rootStates.push(state);
+  }
+
+  // 第一阶段：为每个工作区根目录预留均等扫描配额，防止前序大目录提前吃光 HARD_COLLECT_CAP
+  if (rootStates.length > 0) {
+    const perRootBudget = Math.max(1, Math.floor(HARD_COLLECT_CAP / rootStates.length));
+    for (const state of rootStates) {
+      while (
+        state.head < state.queue.length &&
+        state.collected < perRootBudget &&
+        results.length < HARD_COLLECT_CAP
+      ) {
+        const { currentDir, depth } = state.queue[state.head++];
+        scanDirectory(state, currentDir, depth);
+      }
+    }
+  }
+
+  // 第二阶段：若仍有剩余总采集额度，按根目录轮转广度扫描剩余目录
+  while (results.length < HARD_COLLECT_CAP) {
+    let progressed = false;
+    for (const state of rootStates) {
+      if (results.length >= HARD_COLLECT_CAP) break;
+      if (state.head < state.queue.length) {
+        const { currentDir, depth } = state.queue[state.head++];
+        scanDirectory(state, currentDir, depth);
+        progressed = true;
+      }
+    }
+    if (!progressed) break;
+  }
+
+  results.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return selectBalancedResults(results, limit);
+
+  /**
+   * 广度优先扫描单个目录：先收录本层文件再将未超深的子目录入队，避免深层大量素材阻塞上层文档发现。
+   * @param {{ rootDir: string, queue: Array<{ currentDir: string, depth: number }>, head: number, collected: number }} state
+   * @param {string} currentDir
+   * @param {number} depth
+   */
+  function scanDirectory(state, currentDir, depth) {
     let entries;
     try {
       entries = readdirSync(currentDir, { withFileTypes: true });
@@ -166,15 +314,17 @@ export function scanWorkspaceFiles(workspaceUris = [], options = {}) {
       return;
     }
 
+    const subDirs = [];
+
     for (const entry of entries) {
       if (results.length >= HARD_COLLECT_CAP) break;
 
       const fullPath = join(currentDir, entry.name);
 
       if (entry.isDirectory()) {
-        if (depth >= maxDepth) continue;
-        if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name.toLowerCase())) continue;
-        walkDirectory(fullPath, rootDir, depth + 1);
+        if (depth < maxDepth && !entry.name.startsWith('.') && !SKIP_DIRS.has(entry.name.toLowerCase())) {
+          subDirs.push(fullPath);
+        }
         continue;
       }
 
@@ -199,6 +349,7 @@ export function scanWorkspaceFiles(workspaceUris = [], options = {}) {
       if (seenFiles.has(fileKey)) continue;
       seenFiles.add(fileKey);
 
+      state.collected += 1;
       results.push({
         path: realFile,
         name: entry.name,
@@ -206,9 +357,13 @@ export function scanWorkspaceFiles(workspaceUris = [], options = {}) {
         kind,
         size: stat.size,
         mtimeMs: stat.mtimeMs,
-        relPath: relative(rootDir, fullPath).split(sep).join('/'),
-        workspaceRoot: rootDir,
+        relPath: relative(state.rootDir, fullPath).split(sep).join('/'),
+        workspaceRoot: state.rootDir,
       });
+    }
+
+    for (const subDir of subDirs) {
+      enqueueDirectory(state, subDir, depth + 1);
     }
   }
 }

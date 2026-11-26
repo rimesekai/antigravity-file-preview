@@ -753,7 +753,10 @@ function bootstrap(): void {
     syncUi();
   }
 
-  async function refreshWorkspaceList(targetFile?: string | null): Promise<void> {
+  async function refreshWorkspaceList(
+    targetFile?: string | null,
+    explicitWorkspaceUris?: string[] | null,
+  ): Promise<void> {
     workspaceLoading = true;
     workspaceError = null;
     syncUi();
@@ -763,7 +766,7 @@ function bootstrap(): void {
         (typeof targetFile === 'string' && targetFile.trim())
           ? targetFile.trim()
           : (currentSource?.type === 'disk' ? currentSource.path : null);
-      workspaceFiles = await listWorkspaceFiles(activeDiskPath);
+      workspaceFiles = await listWorkspaceFiles(activeDiskPath, explicitWorkspaceUris);
     } catch (err) {
       workspaceError =
         err instanceof SidecarApiError
@@ -1171,8 +1174,11 @@ function bootstrap(): void {
     }
     syncUi();
   });
-  const stopWorkspaceSync = subscribeWorkspaceChanges(() => {
-    void refreshWorkspaceList(currentSource?.type === 'disk' ? currentSource.path : null);
+  const stopWorkspaceSync = subscribeWorkspaceChanges((uris) => {
+    void refreshWorkspaceList(
+      currentSource?.type === 'disk' ? currentSource.path : null,
+      uris,
+    );
   });
 
   window.addEventListener('beforeunload', () => {

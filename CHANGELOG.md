@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## v0.5.1 (2026-11-26)
+
+### 修复与优化 / Fixes & Improvements
+- **过滤中间渲染目录并均衡扫描，彻底解决大量图片与多文件夹工作区挤占文档问题**：
+  - **跳过中间工作/缓存目录（`server/workspaceScanner.mjs`）**：在 `SKIP_DIRS` 新增 `_work`、`_tmp`、`_temp`、`_cache`、`_build`、`_out`、`_output`、`__pycache__`、`venv` 与 `coverage`，避免翻译或脚本在 `_work/render/...` 中生成的逐页 `.PNG` 渲染图混入工作区预览列表；
+  - **广度优先与跨根目录/跨类型均衡配额**：将工作区扫描从深度优先改为按根目录独立队列的广度优先遍历，确保多文件夹工作区下每个根目录都拥有保底采集预算；当候选结果超过 `200` 条上限时，同时按「工作区根目录 + 文档类型」分配保底名额后再按修改时间补充，防止海量图片或前序大目录将后续文件夹及 PDF/Word/PPT 文档挤出列表；
+  - **实时刷新多工作区列表与目录标识（`src/services/sidecarClient.ts`、`src/main.ts`、`src/components/WorkspaceBrowser.ts`）**：修复 `getWorkspaceUrisSafe()` 命中首次单文件夹缓存后不再向宿主查询最新多文件夹的问题，`onWorkspaceChange` 直接透传最新列表；当存在多个工作区根目录时在列表副标题前显示根目录名便于区分；
+  - **规则链接与测试覆盖**：包含 `rules/AGENTS.md` 与 `skills/file-preview/SKILL.md` 的 `auto_open=false` 默认防自动弹出优化，并在 `tests/server.test.mjs` 新增中间目录过滤与多文件夹均衡扫描测试，全量 18 个套件共 60 项测试全部通过。
+
 ## v0.5.0 (2026-11-24)
 
 ### 新增功能 / Features
